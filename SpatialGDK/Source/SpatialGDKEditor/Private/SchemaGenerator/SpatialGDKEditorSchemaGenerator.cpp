@@ -68,15 +68,13 @@ void OnStatusOutput(FString Message)
 
 void GenerateCompleteSchemaFromClass(FString SchemaPath, FComponentIdGenerator& IdGenerator, TSharedPtr<FUnrealType> TypeInfo)
 {
-	UClass* Class = Cast<UClass>(TypeInfo->Type);
-
 	if (TypeInfo->bIsActorClass)
 	{
 		GenerateActorSchema(IdGenerator, TypeInfo, SchemaPath);
 	}
 	else
 	{
-		GenerateSubobjectSchema(IdGenerator, Class, TypeInfo, SchemaPath + TEXT("Subobjects/"));
+		GenerateSubobjectSchema(IdGenerator, TypeInfo, SchemaPath + TEXT("Subobjects/"));
 	}
 }
 

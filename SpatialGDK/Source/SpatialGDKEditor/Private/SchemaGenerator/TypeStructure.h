@@ -109,6 +109,7 @@ struct FUnrealType
 	TMap<UFunction*, TSharedPtr<FUnrealRPC>> RPCs;
 	TWeakPtr<FUnrealProperty> ParentProperty;
 	bool bIsActorClass;
+	bool bIsActorComponent;
 	FString ClassPath;
 	FString ClassName;
 };

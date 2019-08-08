@@ -190,6 +190,7 @@ TSharedPtr<FUnrealType> CreateUnrealTypeInfo(UStruct* Type, uint32 ParentChecksu
 	TypeNode->Type = Type;
 
 	TypeNode->bIsActorClass = Class->IsChildOf<AActor>();
+	TypeNode->bIsActorComponent = Class->IsChildOf<UActorComponent>();
 
 	TypeNode->ClassPath = GetPathNameSafe(Class);
 	TypeNode->ClassName = GetNameSafe(Class);

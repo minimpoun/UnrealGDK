@@ -18,7 +18,7 @@ extern TMap<FString, uint32> LevelPathToComponentId;
 // Generates schema for an Actor
 void GenerateActorSchema(FComponentIdGenerator& IdGenerator, TSharedPtr<FUnrealType> TypeInfo, FString SchemaPath);
 // Generates schema for a Subobject class - the schema type and the dynamic schema components
-void GenerateSubobjectSchema(FComponentIdGenerator& IdGenerator, UClass* Class, TSharedPtr<FUnrealType> TypeInfo, FString SchemaPath);
+void GenerateSubobjectSchema(FComponentIdGenerator& IdGenerator, TSharedPtr<FUnrealType> TypeInfo, FString SchemaPath);
 // Generates schema for all statically attached subobjects on an Actor.
 void GenerateSubobjectSchemaForActor(FComponentIdGenerator& IdGenerator, TSharedPtr<FUnrealType> TypeInfo,
 	FString SchemaPath, FActorSchemaData& ActorSchemaData, const FActorSchemaData* ExistingSchemaData);

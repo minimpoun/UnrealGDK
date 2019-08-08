@@ -200,7 +200,7 @@ bool IsReplicatedSubobject(TSharedPtr<FUnrealType> TypeInfo)
 	return false;
 }
 
-void GenerateSubobjectSchema(FComponentIdGenerator& IdGenerator, UClass* Class, TSharedPtr<FUnrealType> TypeInfo, FString SchemaPath)
+void GenerateSubobjectSchema(FComponentIdGenerator& IdGenerator, TSharedPtr<FUnrealType> TypeInfo, FString SchemaPath)
 {
 	FCodeWriter Writer;
 
@@ -250,7 +250,7 @@ void GenerateSubobjectSchema(FComponentIdGenerator& IdGenerator, UClass* Class, 
 		}
 
 		// If this class is an Actor Component, it MUST have bReplicates at field ID 1.
-		if (Group == REP_MultiClient && Class->IsChildOf<UActorComponent>())
+		if (Group == REP_MultiClient && TypeInfo->bIsActorComponent)
 		{
 			TSharedPtr<FUnrealProperty> ExpectedReplicatesPropData = RepData[Group].FindRef(SpatialConstants::ACTOR_COMPONENT_REPLICATES_ID);
 			const UProperty* ReplicatesProp = UActorComponent::StaticClass()->FindPropertyByName("bReplicates");
@@ -259,12 +259,12 @@ void GenerateSubobjectSchema(FComponentIdGenerator& IdGenerator, UClass* Class, 
 			{
 				UE_LOG(LogSchemaGenerator, Error, TEXT("Did not find ActorComponent->bReplicates at field %d for class %s. Modifying the base Actor Component class is currently not supported."),
 					SpatialConstants::ACTOR_COMPONENT_REPLICATES_ID,
-					*Class->GetName());
+					*TypeInfo->ClassName);
 			}
 		}
 
 		Writer.PrintNewLine();
-		Writer.Printf("type {0} {", *SchemaReplicatedDataName(Group, Class));
+		Writer.Printf("type {0} {", *SchemaReplicatedDataName(Group, TypeInfo->ClassPath));
 		Writer.Indent();
 		for (auto& RepProp : RepData[Group])
 		{
@@ -280,7 +280,7 @@ void GenerateSubobjectSchema(FComponentIdGenerator& IdGenerator, UClass* Class, 
 	{
 		Writer.PrintNewLine();
 
-		Writer.Printf("type {0} {", *SchemaHandoverDataName(Class));
+		Writer.Printf("type {0} {", *SchemaHandoverDataName(TypeInfo->ClassPath));
 		Writer.Indent();
 		int FieldCounter = 0;
 		for (auto& Prop : HandoverData)
@@ -300,12 +300,12 @@ void GenerateSubobjectSchema(FComponentIdGenerator& IdGenerator, UClass* Class, 
 	FSubobjectSchemaData SubobjectSchemaData;
 
 	// Use previously generated component IDs when possible.
-	const FSubobjectSchemaData* const ExistingSchemaData = SubobjectClassPathToSchema.Find(Class->GetPathName());
+	const FSubobjectSchemaData* const ExistingSchemaData = SubobjectClassPathToSchema.Find(TypeInfo->ClassPath);
 	if (ExistingSchemaData != nullptr && !ExistingSchemaData->GeneratedSchemaName.IsEmpty()
-		&& ExistingSchemaData->GeneratedSchemaName != ClassPathToSchemaName[Class->GetPathName()])
+		&& ExistingSchemaData->GeneratedSchemaName != ClassPathToSchemaName[TypeInfo->ClassPath])
 	{
 		UE_LOG(LogSchemaGenerator, Error, TEXT("Saved generated schema name does not match in-memory version for class %s - schema %s : %s"),
-			*Class->GetPathName(), *ExistingSchemaData->GeneratedSchemaName, *ClassPathToSchemaName[Class->GetPathName()]);
+			*TypeInfo->ClassPath, *ExistingSchemaData->GeneratedSchemaName, *ClassPathToSchemaName[TypeInfo->ClassPath]);
 		UE_LOG(LogSchemaGenerator, Error, TEXT("Schema generation may have resulted in component name clash, recommend you perform a full schema generation"));
 	}
 
@@ -335,12 +335,12 @@ void GenerateSubobjectSchema(FComponentIdGenerator& IdGenerator, UClass* Class, 
 			{
 				ComponentId = IdGenerator.Next();
 			}
-			FString ComponentName = SchemaReplicatedDataName(Group, Class) + TEXT("Dynamic") + FString::FromInt(i);
+			FString ComponentName = SchemaReplicatedDataName(Group, TypeInfo->ClassPath) + TEXT("Dynamic") + FString::FromInt(i);
 
 			Writer.Printf("component {0} {", *ComponentName);
 			Writer.Indent();
 			Writer.Printf("id = {0};", ComponentId);
-			Writer.Printf("data {0};", *SchemaReplicatedDataName(Group, Class));
+			Writer.Printf("data {0};", *SchemaReplicatedDataName(Group, TypeInfo->ClassPath));
 			Writer.Outdent().Print("}");
 
 			DynamicSubobjectComponents.SchemaComponents[PropertyGroupToSchemaComponentType(Group)] = ComponentId;
@@ -360,12 +360,12 @@ void GenerateSubobjectSchema(FComponentIdGenerator& IdGenerator, UClass* Class, 
 			{
 				ComponentId = IdGenerator.Next();
 			}
-			FString ComponentName = SchemaHandoverDataName(Class) + TEXT("Dynamic") + FString::FromInt(i);
+			FString ComponentName = SchemaHandoverDataName(TypeInfo->ClassPath) + TEXT("Dynamic") + FString::FromInt(i);
 
 			Writer.Printf("component {0} {", *ComponentName);
 			Writer.Indent();
 			Writer.Printf("id = {0};", ComponentId);
-			Writer.Printf("data {0};", *SchemaHandoverDataName(Class));
+			Writer.Printf("data {0};", *SchemaHandoverDataName(TypeInfo->ClassPath));
 			Writer.Outdent().Print("}");
 
 			DynamicSubobjectComponents.SchemaComponents[SCHEMA_Handover] = ComponentId;
@@ -374,9 +374,9 @@ void GenerateSubobjectSchema(FComponentIdGenerator& IdGenerator, UClass* Class, 
 		SubobjectSchemaData.DynamicSubobjectComponents.Add(MoveTemp(DynamicSubobjectComponents));
 	}
 
-	Writer.WriteToFile(FString::Printf(TEXT("%s%s.schema"), *SchemaPath, *ClassPathToSchemaName[Class->GetPathName()]));
-	SubobjectSchemaData.GeneratedSchemaName = ClassPathToSchemaName[Class->GetPathName()];
-	SubobjectClassPathToSchema.Add(Class->GetPathName(), SubobjectSchemaData);
+	Writer.WriteToFile(FString::Printf(TEXT("%s%s.schema"), *SchemaPath, *ClassPathToSchemaName[TypeInfo->ClassPath]));
+	SubobjectSchemaData.GeneratedSchemaName = ClassPathToSchemaName[TypeInfo->ClassPath];
+	SubobjectClassPathToSchema.Add(TypeInfo->ClassPath, SubobjectSchemaData);
 }
 
 void GenerateActorSchema(FComponentIdGenerator& IdGenerator, TSharedPtr<FUnrealType> TypeInfo, FString SchemaPath)
