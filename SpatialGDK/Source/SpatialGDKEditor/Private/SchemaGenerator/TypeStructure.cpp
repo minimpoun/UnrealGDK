@@ -295,7 +295,8 @@ TSharedPtr<FUnrealType> CreateUnrealTypeInfo(UStruct* Type, uint32 ParentChecksu
 				// This property is definitely a strong reference, recurse into it.
 				PropertyNode->Type = CreateUnrealTypeInfo(Value->GetClass(), ParentChecksum, 0, bIsRPC);
 				PropertyNode->Type->ParentProperty = PropertyNode;
-				PropertyNode->Type->Object = Value;
+				PropertyNode->Type->ObjectPath = Value->GetPathName();
+				PropertyNode->Type->bObjectEditorOnly = Value->IsEditorOnly();
 				PropertyNode->Type->Name = Value->GetFName();
 
 				if (!bIsRPC)
@@ -358,7 +359,8 @@ TSharedPtr<FUnrealType> CreateUnrealTypeInfo(UStruct* Type, uint32 ParentChecksu
 					{
 						PropertyNode->Type = CreateUnrealTypeInfo(ObjectProperty->PropertyClass, ParentChecksum, 0, bIsRPC);
 						PropertyNode->Type->ParentProperty = PropertyNode;
-						PropertyNode->Type->Object = Node->ComponentTemplate;
+						PropertyNode->Type->ObjectPath = Node->ComponentTemplate->GetPathName();
+						PropertyNode->Type->bObjectEditorOnly = Node->ComponentTemplate->IsEditorOnly();
 						PropertyNode->Type->Name = ObjectProperty->GetFName();
 					}
 				}
@@ -654,7 +656,7 @@ FSubobjectMap GetAllSubobjects(TSharedPtr<FUnrealType> TypeInfo)
 {
 	FSubobjectMap Subobjects;
 
-	TSet<UObject*> SeenComponents;
+	TSet<FString> SeenComponents;
 	uint32 CurrentOffset = 1;
 
 	for (auto& PropertyPair : TypeInfo->Properties)
@@ -664,13 +666,11 @@ FSubobjectMap GetAllSubobjects(TSharedPtr<FUnrealType> TypeInfo)
 
 		if (Property->IsA<UObjectProperty>() && PropertyTypeInfo.IsValid())
 		{
-			UObject* Value = PropertyTypeInfo->Object;
-
-			if (Value != nullptr && !Value->IsEditorOnly())
+			if (!PropertyTypeInfo->bObjectEditorOnly)
 			{
-				if (!SeenComponents.Contains(Value))
+				if (!SeenComponents.Contains(PropertyTypeInfo->ObjectPath))
 				{
-					SeenComponents.Add(Value);
+					SeenComponents.Add(PropertyTypeInfo->ObjectPath);
 					Subobjects.Add(CurrentOffset, PropertyTypeInfo);
 				}
 

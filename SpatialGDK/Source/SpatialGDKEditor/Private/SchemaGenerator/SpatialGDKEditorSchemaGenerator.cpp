@@ -184,7 +184,7 @@ void CheckIdentifierNameValidity(TSharedPtr<FUnrealType> TypeInfo, bool& bOutSuc
 		TSharedPtr<FUnrealType>& SubobjectTypeInfo = It.Value;
 		FString NextSchemaSubobjectName = UnrealNameToSchemaComponentName(SubobjectTypeInfo->Name.ToString());
 
-		if (!CheckSchemaNameValidity(NextSchemaSubobjectName, SubobjectTypeInfo->Object->GetPathName(), TEXT("Subobject")))
+		if (!CheckSchemaNameValidity(NextSchemaSubobjectName, SubobjectTypeInfo->ObjectPath, TEXT("Subobject")))
 		{
 			bOutSuccess = false;
 		}
@@ -192,7 +192,7 @@ void CheckIdentifierNameValidity(TSharedPtr<FUnrealType> TypeInfo, bool& bOutSuc
 		if (TSharedPtr<FUnrealType>* ExistingSubobject = SchemaSubobjectNames.Find(NextSchemaSubobjectName))
 		{
 			UE_LOG(LogSpatialGDKSchemaGenerator, Error, TEXT("Subobject name collision after removing non-alphanumeric characters, schema not generated. Name '%s' collides for '%s' and '%s'"),
-				*NextSchemaSubobjectName, *ExistingSubobject->Get()->Object->GetPathName(), *SubobjectTypeInfo->Object->GetPathName());
+				*NextSchemaSubobjectName, *ExistingSubobject->Get()->ObjectPath, *SubobjectTypeInfo->ObjectPath);
 			bOutSuccess = false;
 		}
 		else

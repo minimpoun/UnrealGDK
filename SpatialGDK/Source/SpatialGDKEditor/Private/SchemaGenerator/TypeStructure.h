@@ -102,7 +102,8 @@ struct FUnrealHandoverData;
 // A node which represents an unreal type, such as ACharacter or UCharacterMovementComponent.
 struct FUnrealType
 {
-	UObject* Object; // Actual instance of the object. Could be the CDO or a Subobject on the CDO/BlueprintGeneratedClass
+	FString ObjectPath; // Path for the object. Either a CDO etc etc blah blah.
+	bool bObjectEditorOnly;
 	FName Name; // Name for the object. This is either the name of the object itself, or the name of the property in the blueprint
 	TMultiMap<UProperty*, TSharedPtr<FUnrealProperty>> Properties;
 	TMap<UFunction*, TSharedPtr<FUnrealRPC>> RPCs;

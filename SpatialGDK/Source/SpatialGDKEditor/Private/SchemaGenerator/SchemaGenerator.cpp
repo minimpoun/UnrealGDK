@@ -622,7 +622,7 @@ void GenerateSubobjectSchemaForActor(FComponentIdGenerator& IdGenerator, TShared
 
 void GenerateSubobjectSchemaForActorIncludes(FCodeWriter& Writer, TSharedPtr<FUnrealType>& TypeInfo)
 {
-	TSet<UStruct*> AlreadyImported;
+	TSet<FString> AlreadyImported;
 
 	for (auto& PropertyPair : TypeInfo->Properties)
 	{
@@ -633,15 +633,13 @@ void GenerateSubobjectSchemaForActorIncludes(FCodeWriter& Writer, TSharedPtr<FUn
 
 		if (ObjectProperty && PropertyTypeInfo.IsValid())
 		{
-			UObject* Value = PropertyTypeInfo->Object;
-
-			if (Value != nullptr && !Value->IsEditorOnly())
+			if (!PropertyTypeInfo->bObjectEditorOnly)
 			{
-				UClass* Class = Value->GetClass();
-				if (!AlreadyImported.Contains(Class) && SchemaGeneratedClassPaths.Contains(Class->GetPathName()))
+				FString ClassPath = PropertyTypeInfo->ClassPath;
+				if (!AlreadyImported.Contains(ClassPath) && SchemaGeneratedClassPaths.Contains(ClassPath))
 				{
-					Writer.Printf("import \"unreal/generated/Subobjects/{0}.schema\";", *ClassPathToSchemaName[Class->GetPathName()]);
-					AlreadyImported.Add(Class);
+					Writer.Printf("import \"unreal/generated/Subobjects/{0}.schema\";", *ClassPathToSchemaName[ClassPath]);
+					AlreadyImported.Add(ClassPath);
 				}
 			}
 		}
