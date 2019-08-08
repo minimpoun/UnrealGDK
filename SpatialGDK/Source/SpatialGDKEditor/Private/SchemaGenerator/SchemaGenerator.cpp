@@ -492,12 +492,14 @@ void GenerateActorSchema(FComponentIdGenerator& IdGenerator, TSharedPtr<FUnrealT
 	Writer.WriteToFile(FString::Printf(TEXT("%s%s.schema"), *SchemaPath, *ClassPathToSchemaName[TypeInfo->ClassPath]));
 }
 
-FActorSpecificSubobjectSchemaData GenerateSchemaForStaticallyAttachedSubobject(FCodeWriter& Writer, FComponentIdGenerator& IdGenerator, FString PropertyName, TSharedPtr<FUnrealType>& TypeInfo, UClass* ComponentClass, TSharedPtr<FUnrealType>& ActorTypeInfo, int MapIndex, const FActorSpecificSubobjectSchemaData* ExistingSchemaData)
+FActorSpecificSubobjectSchemaData GenerateSchemaForStaticallyAttachedSubobject(FCodeWriter& Writer, FComponentIdGenerator& IdGenerator,
+	FString PropertyName, TSharedPtr<FUnrealType>& TypeInfo, TSharedPtr<FUnrealType>& ActorTypeInfo, int MapIndex,
+	const FActorSpecificSubobjectSchemaData* ExistingSchemaData)
 {
 	FUnrealFlatRepData RepData = GetFlatRepData(TypeInfo);
 
 	FActorSpecificSubobjectSchemaData SubobjectData;
-	SubobjectData.ClassPath = ComponentClass->GetPathName();
+	SubobjectData.ClassPath = TypeInfo->ClassPath;
 
 	for (EReplicatedPropertyGroup Group : GetAllReplicatedPropertyGroups())
 	{
@@ -525,7 +527,7 @@ FActorSpecificSubobjectSchemaData GenerateSchemaForStaticallyAttachedSubobject(F
 		Writer.Printf("component {0} {", *ComponentName);
 		Writer.Indent();
 		Writer.Printf("id = {0};", ComponentId);
-		Writer.Printf("data unreal.generated.{0};", *SchemaReplicatedDataName(Group, ComponentClass));
+		Writer.Printf("data unreal.generated.{0};", *SchemaReplicatedDataName(Group, TypeInfo->ClassPath));
 		Writer.Outdent().Print("}");
 
 		SubobjectData.SchemaComponents[PropertyGroupToSchemaComponentType(Group)] = ComponentId;
@@ -550,7 +552,7 @@ FActorSpecificSubobjectSchemaData GenerateSchemaForStaticallyAttachedSubobject(F
 		Writer.Printf("component {0} {", *(PropertyName + TEXT("Handover")));
 		Writer.Indent();
 		Writer.Printf("id = {0};", ComponentId);
-		Writer.Printf("data unreal.generated.{0};", *SchemaHandoverDataName(ComponentClass));
+		Writer.Printf("data unreal.generated.{0};", *SchemaHandoverDataName(TypeInfo->ClassPath));
 		Writer.Outdent().Print("}");
 
 		SubobjectData.SchemaComponents[ESchemaComponentType::SCHEMA_Handover] = ComponentId;
@@ -580,11 +582,10 @@ void GenerateSubobjectSchemaForActor(FComponentIdGenerator& IdGenerator, TShared
 	for (auto& It : Subobjects)
 	{
 		TSharedPtr<FUnrealType>& SubobjectTypeInfo = It.Value;
-		UClass* SubobjectClass = Cast<UClass>(SubobjectTypeInfo->Type);
 
 		FActorSpecificSubobjectSchemaData SubobjectData;
 
-		if (SchemaGeneratedClasses.Contains(SubobjectClass))
+		if (SchemaGeneratedClassPaths.Contains(SubobjectTypeInfo->ClassPath))
 		{
 			bHasComponents = true;
 
@@ -600,7 +601,7 @@ void GenerateSubobjectSchemaForActor(FComponentIdGenerator& IdGenerator, TShared
 					}
 				}
 			}
-			SubobjectData = GenerateSchemaForStaticallyAttachedSubobject(Writer, IdGenerator, UnrealNameToSchemaComponentName(SubobjectTypeInfo->Name.ToString()), SubobjectTypeInfo, SubobjectClass, TypeInfo, 0, ExistingSubobjectSchemaData);
+			SubobjectData = GenerateSchemaForStaticallyAttachedSubobject(Writer, IdGenerator, UnrealNameToSchemaComponentName(SubobjectTypeInfo->Name.ToString()), SubobjectTypeInfo, TypeInfo, 0, ExistingSubobjectSchemaData);
 		}
 		else
 		{
@@ -637,7 +638,7 @@ void GenerateSubobjectSchemaForActorIncludes(FCodeWriter& Writer, TSharedPtr<FUn
 			if (Value != nullptr && !Value->IsEditorOnly())
 			{
 				UClass* Class = Value->GetClass();
-				if (!AlreadyImported.Contains(Class) && SchemaGeneratedClasses.Contains(Class))
+				if (!AlreadyImported.Contains(Class) && SchemaGeneratedClassPaths.Contains(Class->GetPathName()))
 				{
 					Writer.Printf("import \"unreal/generated/Subobjects/{0}.schema\";", *ClassPathToSchemaName[Class->GetPathName()]);
 					AlreadyImported.Add(Class);

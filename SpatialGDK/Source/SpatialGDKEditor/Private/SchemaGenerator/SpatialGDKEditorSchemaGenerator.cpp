@@ -40,6 +40,7 @@ DEFINE_LOG_CATEGORY(LogSpatialGDKSchemaGenerator);
 #define LOCTEXT_NAMESPACE "SpatialGDKSchemaGenerator"
 
 TArray<UClass*> SchemaGeneratedClasses;
+TArray<FString> SchemaGeneratedClassPaths;
 TMap<FString, FActorSchemaData> ActorClassPathToSchema;
 TMap<FString, FSubobjectSchemaData> SubobjectClassPathToSchema;
 uint32 NextAvailableComponentId;
@@ -208,10 +209,8 @@ bool ValidateIdentifierNames(TArray<TSharedPtr<FUnrealType>>& TypeInfos)
 	// Remove all underscores from the class names, check for duplicates or invalid schema names.
 	for (const auto& TypeInfo : TypeInfos)
 	{
-		UClass* Class = Cast<UClass>(TypeInfo->Type);
-		check(Class);
-		const FString& ClassName = Class->GetName();
-		const FString& ClassPath = Class->GetPathName();
+		const FString& ClassName = TypeInfo->ClassName;
+		const FString& ClassPath = TypeInfo->ClassPath;
 		FString SchemaName = UnrealNameToSchemaName(ClassName);
 
 		if (!CheckSchemaNameValidity(SchemaName, ClassPath, TEXT("Class")))
@@ -677,7 +676,9 @@ bool SpatialGDKGenerateSchema()
 	for (const auto& Class : SchemaGeneratedClasses)
 	{
 		// Parent and static array index start at 0 for checksum calculations.
-		TypeInfos.Add(CreateUnrealTypeInfo(Class, 0, 0, false));
+		TSharedPtr<FUnrealType> TypeInfo = CreateUnrealTypeInfo(Class, 0, 0, false);
+		TypeInfos.Add(TypeInfo);
+		SchemaGeneratedClassPaths.Add(TypeInfo->ClassPath);
 	}
 
 	if (!ValidateIdentifierNames(TypeInfos))

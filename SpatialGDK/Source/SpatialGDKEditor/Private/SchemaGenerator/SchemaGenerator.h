@@ -10,7 +10,7 @@ DECLARE_LOG_CATEGORY_EXTERN(LogSchemaGenerator, Log, All);
 class FCodeWriter;
 struct FComponentIdGenerator;
 
-extern TArray<UClass*> SchemaGeneratedClasses;
+extern TArray<FString> SchemaGeneratedClassPaths;
 extern TMap<FString, FActorSchemaData> ActorClassPathToSchema;
 extern TMap<FString, FSubobjectSchemaData> SubobjectClassPathToSchema;
 extern TMap<FString, uint32> LevelPathToComponentId;
@@ -24,7 +24,7 @@ void GenerateSubobjectSchemaForActor(FComponentIdGenerator& IdGenerator, TShared
 	FString SchemaPath, FActorSchemaData& ActorSchemaData, const FActorSchemaData* ExistingSchemaData);
 // Generates schema for a statically attached subobject on an Actor - called by GenerateSubobjectSchemaForActor.
 FActorSpecificSubobjectSchemaData GenerateSchemaForStaticallyAttachedSubobject(FCodeWriter& Writer, FComponentIdGenerator& IdGenerator,
-	FString PropertyName, TSharedPtr<FUnrealType>& TypeInfo, UClass* ComponentClass, TSharedPtr<FUnrealType>& ActorTypeInfo, int MapIndex,
+	FString PropertyName, TSharedPtr<FUnrealType>& TypeInfo, TSharedPtr<FUnrealType>& ActorTypeInfo, int MapIndex,
 	const FActorSpecificSubobjectSchemaData* ExistingSchemaData);
 // Output the includes required by this schema file.
 void GenerateSubobjectSchemaForActorIncludes(FCodeWriter& Writer, TSharedPtr<FUnrealType>& TypeInfo);
