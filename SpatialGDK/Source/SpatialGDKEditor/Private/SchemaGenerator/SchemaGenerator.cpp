@@ -379,9 +379,9 @@ void GenerateSubobjectSchema(FComponentIdGenerator& IdGenerator, UClass* Class, 
 	SubobjectClassPathToSchema.Add(Class->GetPathName(), SubobjectSchemaData);
 }
 
-void GenerateActorSchema(FComponentIdGenerator& IdGenerator, UClass* Class, TSharedPtr<FUnrealType> TypeInfo, FString SchemaPath)
+void GenerateActorSchema(FComponentIdGenerator& IdGenerator, TSharedPtr<FUnrealType> TypeInfo, FString SchemaPath)
 {
-	const FActorSchemaData* const SchemaData = ActorClassPathToSchema.Find(Class->GetPathName());
+	const FActorSchemaData* const SchemaData = ActorClassPathToSchema.Find(TypeInfo->ClassPath);
 
 	FCodeWriter Writer;
 
@@ -389,14 +389,14 @@ void GenerateActorSchema(FComponentIdGenerator& IdGenerator, UClass* Class, TSha
 		// Copyright (c) Improbable Worlds Ltd, All Rights Reserved
 		// Note that this file has been generated automatically
 		package unreal.generated.{0};)""",
-		*ClassPathToSchemaName[Class->GetPathName()].ToLower());
+		*ClassPathToSchemaName[TypeInfo->ClassPath].ToLower());
 
 	// Will always be included since AActor has replicated pointers to other actors
 	Writer.PrintNewLine();
 	Writer.Printf("import \"unreal/gdk/core_types.schema\";");
 
 	FActorSchemaData ActorSchemaData;
-	ActorSchemaData.GeneratedSchemaName = ClassPathToSchemaName[Class->GetPathName()];
+	ActorSchemaData.GeneratedSchemaName = ClassPathToSchemaName[TypeInfo->ClassPath];
 
 	FUnrealFlatRepData RepData = GetFlatRepData(TypeInfo);
 
@@ -409,7 +409,7 @@ void GenerateActorSchema(FComponentIdGenerator& IdGenerator, UClass* Class, TSha
 		}
 
 		// If this class is an Actor, it MUST have bTearOff at field ID 3.	
-		if (Group == REP_MultiClient && Class->IsChildOf<AActor>())
+		if (Group == REP_MultiClient && TypeInfo->bIsActorClass)
 		{
 			TSharedPtr<FUnrealProperty> ExpectedReplicatesPropData = RepData[Group].FindRef(SpatialConstants::ACTOR_TEAROFF_ID);
 			const UProperty* ReplicatesProp = AActor::StaticClass()->FindPropertyByName("bTearOff");
@@ -418,7 +418,7 @@ void GenerateActorSchema(FComponentIdGenerator& IdGenerator, UClass* Class, TSha
 			{
 				UE_LOG(LogSchemaGenerator, Error, TEXT("Did not find Actor->bTearOff at field %d for class %s. Modifying the base Actor class is currently not supported."),
 					SpatialConstants::ACTOR_TEAROFF_ID,
-					*Class->GetName());
+					*TypeInfo->ClassName);
 			}
 		}
 
@@ -434,7 +434,7 @@ void GenerateActorSchema(FComponentIdGenerator& IdGenerator, UClass* Class, TSha
 
 		Writer.PrintNewLine();
 
-		Writer.Printf("component {0} {", *SchemaReplicatedDataName(Group, Class));
+		Writer.Printf("component {0} {", *SchemaReplicatedDataName(Group, TypeInfo->ClassPath));
 		Writer.Indent();
 		Writer.Printf("id = {0};", ComponentId);
 
@@ -468,7 +468,7 @@ void GenerateActorSchema(FComponentIdGenerator& IdGenerator, UClass* Class, TSha
 		Writer.PrintNewLine();
 
 		// Handover (server to server) replicated properties.
-		Writer.Printf("component {0} {", *SchemaHandoverDataName(Class));
+		Writer.Printf("component {0} {", *SchemaHandoverDataName(TypeInfo->ClassPath));
 		Writer.Indent();
 		Writer.Printf("id = {0};", ComponentId);
 
@@ -485,14 +485,14 @@ void GenerateActorSchema(FComponentIdGenerator& IdGenerator, UClass* Class, TSha
 		Writer.Outdent().Print("}");
 	}
 
-	GenerateSubobjectSchemaForActor(IdGenerator, Class, TypeInfo, SchemaPath, ActorSchemaData, ActorClassPathToSchema.Find(Class->GetPathName()));
+	GenerateSubobjectSchemaForActor(IdGenerator, TypeInfo, SchemaPath, ActorSchemaData, ActorClassPathToSchema.Find(TypeInfo->ClassPath));
 
-	ActorClassPathToSchema.Add(Class->GetPathName(), ActorSchemaData);
+	ActorClassPathToSchema.Add(TypeInfo->ClassPath, ActorSchemaData);
 
-	Writer.WriteToFile(FString::Printf(TEXT("%s%s.schema"), *SchemaPath, *ClassPathToSchemaName[Class->GetPathName()]));
+	Writer.WriteToFile(FString::Printf(TEXT("%s%s.schema"), *SchemaPath, *ClassPathToSchemaName[TypeInfo->ClassPath]));
 }
 
-FActorSpecificSubobjectSchemaData GenerateSchemaForStaticallyAttachedSubobject(FCodeWriter& Writer, FComponentIdGenerator& IdGenerator, FString PropertyName, TSharedPtr<FUnrealType>& TypeInfo, UClass* ComponentClass, UClass* ActorClass, int MapIndex, const FActorSpecificSubobjectSchemaData* ExistingSchemaData)
+FActorSpecificSubobjectSchemaData GenerateSchemaForStaticallyAttachedSubobject(FCodeWriter& Writer, FComponentIdGenerator& IdGenerator, FString PropertyName, TSharedPtr<FUnrealType>& TypeInfo, UClass* ComponentClass, TSharedPtr<FUnrealType>& ActorTypeInfo, int MapIndex, const FActorSpecificSubobjectSchemaData* ExistingSchemaData)
 {
 	FUnrealFlatRepData RepData = GetFlatRepData(TypeInfo);
 
@@ -559,7 +559,7 @@ FActorSpecificSubobjectSchemaData GenerateSchemaForStaticallyAttachedSubobject(F
 	return SubobjectData;
 }
 
-void GenerateSubobjectSchemaForActor(FComponentIdGenerator& IdGenerator, UClass* ActorClass, TSharedPtr<FUnrealType> TypeInfo, FString SchemaPath, FActorSchemaData& ActorSchemaData, const FActorSchemaData* ExistingSchemaData)
+void GenerateSubobjectSchemaForActor(FComponentIdGenerator& IdGenerator, TSharedPtr<FUnrealType> TypeInfo, FString SchemaPath, FActorSchemaData& ActorSchemaData, const FActorSchemaData* ExistingSchemaData)
 {
 	FCodeWriter Writer;
 
@@ -567,7 +567,7 @@ void GenerateSubobjectSchemaForActor(FComponentIdGenerator& IdGenerator, UClass*
 		// Copyright (c) Improbable Worlds Ltd, All Rights Reserved
 		// Note that this file has been generated automatically
 		package unreal.generated.{0}.subobjects;)""",
-		*ClassPathToSchemaName[ActorClass->GetPathName()].ToLower());
+		*ClassPathToSchemaName[TypeInfo->ClassPath].ToLower());
 
 	Writer.PrintNewLine();
 
@@ -600,7 +600,7 @@ void GenerateSubobjectSchemaForActor(FComponentIdGenerator& IdGenerator, UClass*
 					}
 				}
 			}
-			SubobjectData = GenerateSchemaForStaticallyAttachedSubobject(Writer, IdGenerator, UnrealNameToSchemaComponentName(SubobjectTypeInfo->Name.ToString()), SubobjectTypeInfo, SubobjectClass, ActorClass, 0, ExistingSubobjectSchemaData);
+			SubobjectData = GenerateSchemaForStaticallyAttachedSubobject(Writer, IdGenerator, UnrealNameToSchemaComponentName(SubobjectTypeInfo->Name.ToString()), SubobjectTypeInfo, SubobjectClass, TypeInfo, 0, ExistingSubobjectSchemaData);
 		}
 		else
 		{
@@ -615,7 +615,7 @@ void GenerateSubobjectSchemaForActor(FComponentIdGenerator& IdGenerator, UClass*
 
 	if (bHasComponents)
 	{
-		Writer.WriteToFile(FString::Printf(TEXT("%s%sComponents.schema"), *SchemaPath, *ClassPathToSchemaName[ActorClass->GetPathName()]));
+		Writer.WriteToFile(FString::Printf(TEXT("%s%sComponents.schema"), *SchemaPath, *ClassPathToSchemaName[TypeInfo->ClassPath]));
 	}
 }
 

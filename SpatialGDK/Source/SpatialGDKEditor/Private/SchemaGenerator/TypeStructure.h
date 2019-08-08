@@ -108,6 +108,9 @@ struct FUnrealType
 	TMultiMap<UProperty*, TSharedPtr<FUnrealProperty>> Properties;
 	TMap<UFunction*, TSharedPtr<FUnrealRPC>> RPCs;
 	TWeakPtr<FUnrealProperty> ParentProperty;
+	bool bIsActorClass;
+	FString ClassPath;
+	FString ClassName;
 };
 
 // A node which represents a single property or parameter in an RPC.

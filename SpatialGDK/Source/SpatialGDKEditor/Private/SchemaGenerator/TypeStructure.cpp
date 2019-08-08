@@ -189,6 +189,11 @@ TSharedPtr<FUnrealType> CreateUnrealTypeInfo(UStruct* Type, uint32 ParentChecksu
 	TSharedPtr<FUnrealType> TypeNode = MakeShared<FUnrealType>();
 	TypeNode->Type = Type;
 
+	TypeNode->bIsActorClass = Class->IsChildOf<AActor>();
+
+	TypeNode->ClassPath = GetPathNameSafe(Class);
+	TypeNode->ClassName = GetNameSafe(Class);
+
 	// Iterate through each property in the struct.
 	for (TFieldIterator<UProperty> It(Type); It; ++It)
 	{

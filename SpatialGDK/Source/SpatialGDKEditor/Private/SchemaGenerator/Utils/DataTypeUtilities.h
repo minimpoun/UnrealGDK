@@ -21,9 +21,13 @@ FString UnrealNameToSchemaComponentName(const FString& UnrealName);
 // For example: UnrealCharacterMultiClientRepData
 FString SchemaReplicatedDataName(EReplicatedPropertyGroup Group, UClass* Class);
 
+FString SchemaReplicatedDataName(EReplicatedPropertyGroup Group, FString ClassPath);
+
 // Given an unreal type, generates the name of the component which stores server to server replication data.
 // For example: UnrealCharacterHandoverData
 FString SchemaHandoverDataName(UClass* Class);
+
+FString SchemaHandoverDataName(FString ClassPath);
 
 // Given a UFunction, generates the schema command name. Currently just returns the function name in lowercase.
 FString SchemaRPCName(UFunction* Function);

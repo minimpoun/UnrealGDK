@@ -60,9 +60,19 @@ FString SchemaReplicatedDataName(EReplicatedPropertyGroup Group, UClass* Class)
 	return FString::Printf(TEXT("%s%s"), *UnrealNameToSchemaComponentName(ClassPathToSchemaName[Class->GetPathName()]), *GetReplicatedPropertyGroupName(Group));
 }
 
+FString SchemaReplicatedDataName(EReplicatedPropertyGroup Group, FString ClassPath)
+{
+	return FString::Printf(TEXT("%s%s"), *UnrealNameToSchemaComponentName(ClassPathToSchemaName[ClassPath]), *GetReplicatedPropertyGroupName(Group));
+}
+
 FString SchemaHandoverDataName(UClass* Class)
 {
 	return FString::Printf(TEXT("%sHandover"), *UnrealNameToSchemaComponentName(ClassPathToSchemaName[Class->GetPathName()]));
+}
+
+FString SchemaHandoverDataName(FString ClassPath)
+{
+	return FString::Printf(TEXT("%sHandover"), *UnrealNameToSchemaComponentName(ClassPathToSchemaName[ClassPath]));
 }
 
 FString SchemaRPCName(UFunction* Function)

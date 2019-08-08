@@ -69,11 +69,10 @@ void OnStatusOutput(FString Message)
 void GenerateCompleteSchemaFromClass(FString SchemaPath, FComponentIdGenerator& IdGenerator, TSharedPtr<FUnrealType> TypeInfo)
 {
 	UClass* Class = Cast<UClass>(TypeInfo->Type);
-	FString SchemaFilename = UnrealNameToSchemaName(Class->GetName());
 
-	if (Class->IsChildOf<AActor>())
+	if (TypeInfo->bIsActorClass)
 	{
-		GenerateActorSchema(IdGenerator, Class, TypeInfo, SchemaPath);
+		GenerateActorSchema(IdGenerator, TypeInfo, SchemaPath);
 	}
 	else
 	{
