@@ -107,7 +107,7 @@ struct FUnrealType
 	FName Name; // Name for the object. This is either the name of the object itself, or the name of the property in the blueprint
 	TMultiMap<UProperty*, TSharedPtr<FUnrealProperty>> PropertiesMap; // Only needed at generation time.
 	TArray<TSharedPtr<FUnrealProperty>> PropertiesList;
-	TMap<UFunction*, TSharedPtr<FUnrealRPC>> RPCs;
+	uint32 NumRPCs;
 	TWeakPtr<FUnrealProperty> ParentProperty;
 	bool bIsActorClass;
 	bool bIsActorComponent;
@@ -184,8 +184,6 @@ TArray<ERPCType> GetRPCTypes();
 // Given a UFunction, determines the RPC type.
 ERPCType GetRPCTypeFromFunction(UFunction* Function);
 
-TArray<FString> GetRPCTypeOwners(TSharedPtr<FUnrealType> TypeInfo);
-
 // Converts an RPC type to string. Used to generate component names.
 FString GetRPCTypeName(ERPCType RPCType);
 
@@ -228,7 +226,7 @@ FCmdHandlePropertyMap GetFlatHandoverData(TSharedPtr<FUnrealType> TypeInfo);
 // of the Unreal class represented by TypeInfo.
 //
 // This function will traverse into subobject properties.
-FUnrealRPCsByType GetAllRPCsByType(TSharedPtr<FUnrealType> TypeInfo);
+//FUnrealRPCsByType GetAllRPCsByType(TSharedPtr<FUnrealType> TypeInfo);
 
 // Given a property, traverse up to the root property and create a list of properties needed to reach the leaf property.
 // For example: foo->bar->baz becomes {"foo", "bar", "baz"}.

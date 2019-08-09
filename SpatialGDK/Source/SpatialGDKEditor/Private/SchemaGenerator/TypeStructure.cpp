@@ -398,36 +398,7 @@ TSharedPtr<FUnrealType> CreateUnrealTypeInfo(UStruct* Type, uint32 ParentChecksu
 	TArray<UFunction*> RelevantClassFunctions = SpatialGDK::GetClassRPCFunctions(Class);
 
 	// Iterate through each RPC in the class.
-	for (UFunction* RemoteFunction : RelevantClassFunctions)
-	{
-		TSharedPtr<FUnrealRPC> RPCNode = MakeShared<FUnrealRPC>();
-		RPCNode->CallerType = Class;
-		RPCNode->Function = RemoteFunction;
-		RPCNode->Type = GetRPCTypeFromFunction(RemoteFunction);
-		RPCNode->bReliable = (RemoteFunction->FunctionFlags & FUNC_NetReliable) != 0;
-		TypeNode->RPCs.Add(RemoteFunction, RPCNode);
-
-		// Fill out parameters.
-		for (TFieldIterator<UProperty> It(RemoteFunction); It; ++It)
-		{
-			UProperty* Parameter = *It;
-
-			TSharedPtr<FUnrealProperty> PropertyNode = MakeShared<FUnrealProperty>();
-			PropertyNode->Property = Parameter;
-
-			// RPCs can't have static arrays as parameters so we don't have to special case for them here, however struct parameters can have static arrays in them.
-			RPCNode->Parameters.Add(Parameter, PropertyNode);
-
-			// If this RPC parameter is a struct, recurse into it.
-			if (UStructProperty* StructParameter = Cast<UStructProperty>(Parameter))
-			{
-				uint32 StructChecksum = GenerateChecksum(Parameter, ParentChecksum, 0);
-				PropertyNode->CompatibleChecksum = StructChecksum;
-				PropertyNode->Type = CreateUnrealTypeInfo(StructParameter->Struct, StructChecksum, 0 , true);
-				PropertyNode->Type->ParentProperty = PropertyNode;
-			}
-		}
-	}
+	TypeNode->NumRPCs += RelevantClassFunctions.Num();
 
 	// Set up replicated properties by reading the rep layout and matching the properties with the ones in the type node.
 	// Based on inspection in InitFromObjectClass, the RepLayout will always replicate object properties using NetGUIDs, regardless of
@@ -633,40 +604,23 @@ FCmdHandlePropertyMap GetFlatHandoverData(TSharedPtr<FUnrealType> TypeInfo)
 	return HandoverData;
 }
 
-// Goes through all RPCs in the TypeInfo and returns a list of all the unique RPC source classes.
-TArray<FString> GetRPCTypeOwners(TSharedPtr<FUnrealType> TypeInfo)
-{
-	TArray<FString> RPCTypeOwners;
-	VisitAllObjects(TypeInfo, [&RPCTypeOwners](TSharedPtr<FUnrealType> Type)
-	{
-		for (auto& RPC : Type->RPCs)
-		{
-			FString RPCOwnerName = *RPC.Value->Function->GetOuter()->GetName();
-			RPCTypeOwners.AddUnique(RPCOwnerName);
-			UE_LOG(LogSpatialGDKSchemaGenerator, Log, TEXT("RPC Type Owner Found - %s ::  %s"), *RPCOwnerName, *RPC.Value->Function->GetName());
-		}
-		return true;
-	}, false);
-	return RPCTypeOwners;
-}
-
-FUnrealRPCsByType GetAllRPCsByType(TSharedPtr<FUnrealType> TypeInfo)
-{
-	FUnrealRPCsByType RPCsByType;
-	RPCsByType.Add(RPC_Client);
-	RPCsByType.Add(RPC_Server);
-	RPCsByType.Add(RPC_CrossServer);
-	RPCsByType.Add(RPC_NetMulticast);
-	VisitAllObjects(TypeInfo, [&RPCsByType](TSharedPtr<FUnrealType> Type)
-	{
-		for (auto& RPC : Type->RPCs)
-		{
-			RPCsByType.FindOrAdd(RPC.Value->Type).Add(RPC.Value);
-		}
-		return true;
-	}, false);
-	return RPCsByType;
-}
+//FUnrealRPCsByType GetAllRPCsByType(TSharedPtr<FUnrealType> TypeInfo)
+//{
+//	FUnrealRPCsByType RPCsByType;
+//	RPCsByType.Add(RPC_Client);
+//	RPCsByType.Add(RPC_Server);
+//	RPCsByType.Add(RPC_CrossServer);
+//	RPCsByType.Add(RPC_NetMulticast);
+//	VisitAllObjects(TypeInfo, [&RPCsByType](TSharedPtr<FUnrealType> Type)
+//	{
+//		for (auto& RPC : Type->RPCs)
+//		{
+//			RPCsByType.FindOrAdd(RPC.Value->Type).Add(RPC.Value);
+//		}
+//		return true;
+//	}, false);
+//	return RPCsByType;
+//}
 
 TArray<TSharedPtr<FUnrealProperty>> GetPropertyChain(TSharedPtr<FUnrealProperty> LeafProperty)
 {

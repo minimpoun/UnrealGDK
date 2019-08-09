@@ -150,7 +150,7 @@ void CheckIdentifierNameValidity(TSharedPtr<FUnrealType> TypeInfo, bool& bOutSuc
 	}
 
 	// Check RPC name validity.
-	FUnrealRPCsByType RPCsByType = GetAllRPCsByType(TypeInfo);
+	/*FUnrealRPCsByType RPCsByType = GetAllRPCsByType(TypeInfo);
 	for (auto Group : GetRPCTypes())
 	{
 		TMap<FString, TSharedPtr<FUnrealRPC>> SchemaRPCNames;
@@ -174,7 +174,7 @@ void CheckIdentifierNameValidity(TSharedPtr<FUnrealType> TypeInfo, bool& bOutSuc
 				SchemaRPCNames.Add(NextSchemaRPCName, RPC);
 			}
 		}
-	}
+	}*/
 
 	// Check subobject name validity.
 	FSubobjectMap Subobjects = GetAllSubobjects(TypeInfo);

@@ -192,7 +192,7 @@ bool IsReplicatedSubobject(TSharedPtr<FUnrealType> TypeInfo)
 		return true;
 	}
 
-	if (TypeInfo->RPCs.Num() > 0)
+	if (TypeInfo->NumRPCs > 0)
 	{
 		return true;
 	}
