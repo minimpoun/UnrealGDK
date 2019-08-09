@@ -8,23 +8,6 @@
 // Regex pattern matcher to match alphanumeric characters.
 const FRegexPattern AlphanumericPattern(TEXT("[A-Za-z0-9]"));
 
-FString GetEnumDataType(const UEnumProperty* EnumProperty)
-{
-	FString DataType;
-
-	if (EnumProperty->ElementSize < 4)
-	{
-		// schema types don't include support for 8 or 16 bit data types
-		DataType = TEXT("uint32");
-	}
-	else
-	{
-		DataType = EnumProperty->GetUnderlyingProperty()->GetCPPType();
-	}
-
-	return DataType;
-}
-
 FString UnrealNameToSchemaName(const FString& UnrealName)
 {
 	return AlphanumericSanitization(UnrealName);
@@ -86,8 +69,8 @@ FString SchemaFieldName(const TSharedPtr<FUnrealProperty> Property)
 	TArray<FString> ChainNames;
 	Algo::Transform(GetPropertyChain(Property), ChainNames, [](const TSharedPtr<FUnrealProperty>& Property) -> FString
 	{
-		FString PropName = Property->Property->GetName().ToLower();
-		if (Property->Property->ArrayDim > 1)
+		FString PropName = Property->PropertyName.ToLower();
+		if (Property->ArrayDim > 1)
 		{
 			PropName.Append(FString::FromInt(Property->StaticArrayIndex));
 		}

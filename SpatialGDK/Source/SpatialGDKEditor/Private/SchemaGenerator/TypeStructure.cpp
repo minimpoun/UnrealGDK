@@ -107,22 +107,6 @@ FString GetRPCTypeName(ERPCType RPCType)
 	}
 }
 
-void VisitAllObjects(TSharedPtr<FUnrealType> TypeNode, TFunction<bool(TSharedPtr<FUnrealType>)> Visitor, bool bRecurseIntoSubobjects)
-{
-	bool bShouldRecurseFurther = Visitor(TypeNode);
-	for (auto& PropertyPair : TypeNode->PropertiesMap)
-	{
-		if (bShouldRecurseFurther && PropertyPair.Value->Type.IsValid())
-		{
-			// Either recurse into subobjects if they're structs or bRecurseIntoSubobjects is true.
-			if (bRecurseIntoSubobjects || PropertyPair.Value->Property->IsA<UStructProperty>())
-			{
-				VisitAllObjects(PropertyPair.Value->Type, Visitor, bRecurseIntoSubobjects);
-			}
-		}
-	}
-}
-
 void VisitAllPropertiesMap(TSharedPtr<FUnrealType> TypeNode, TFunction<bool(TSharedPtr<FUnrealProperty>)> Visitor, bool bRecurseIntoSubobjects)
 {
 	for (auto& PropertyPair : TypeNode->PropertiesMap)
@@ -131,7 +115,7 @@ void VisitAllPropertiesMap(TSharedPtr<FUnrealType> TypeNode, TFunction<bool(TSha
 		if (bShouldRecurseFurther && PropertyPair.Value->Type.IsValid())
 		{
 			// Either recurse into subobjects if they're structs or bRecurseIntoSubobjects is true.
-			if (bRecurseIntoSubobjects || PropertyPair.Value->Property->IsA<UStructProperty>())
+			if (bRecurseIntoSubobjects || PropertyPair.Value->bStructProperty)
 			{
 				VisitAllPropertiesMap(PropertyPair.Value->Type, Visitor, bRecurseIntoSubobjects);
 			}
@@ -147,7 +131,7 @@ void VisitAllPropertiesList(TSharedPtr<FUnrealType> TypeNode, TFunction<bool(TSh
 		if (bShouldRecurseFurther && PropertyInfo->Type.IsValid())
 		{
 			// Either recurse into subobjects if they're structs or bRecurseIntoSubobjects is true.
-			if (bRecurseIntoSubobjects || PropertyInfo->Property->IsA<UStructProperty>())
+			if (bRecurseIntoSubobjects || PropertyInfo->bStructProperty)
 			{
 				VisitAllPropertiesList(PropertyInfo->Type, Visitor, bRecurseIntoSubobjects);
 			}
@@ -185,10 +169,27 @@ uint32 GenerateChecksum(UProperty* Property, uint32 ParentChecksum, int32 Static
 TSharedPtr<FUnrealProperty> CreateUnrealProperty(TSharedPtr<FUnrealType> TypeNode, UProperty* Property, uint32 ParentChecksum, uint32 StaticArrayIndex)
 {
 	TSharedPtr<FUnrealProperty> PropertyNode = MakeShared<FUnrealProperty>();
-	PropertyNode->Property = Property;
+	//PropertyNode->Property = Property;
 	PropertyNode->ContainerType = TypeNode;
 	PropertyNode->ParentChecksum = ParentChecksum;
 	PropertyNode->StaticArrayIndex = StaticArrayIndex;
+	PropertyNode->PropertyPath = Property->GetPathName();
+	PropertyNode->PropertyName = Property->GetName();
+	if (const UArrayProperty* ArrayProp = Cast<UArrayProperty>(Property))
+	{
+		PropertyNode->bArrayProperty = true;
+		PropertyNode->bObjectArrayProperty = ArrayProp->Inner->IsA<UObjectPropertyBase>();
+	}
+	PropertyNode->bObjectProperty = Property->IsA<UObjectProperty>();
+	if (const UStructProperty* StructProp = Cast<UStructProperty>(Property))
+	{
+		PropertyNode->bStructProperty = true;
+		PropertyNode->StructFlags = StructProp->Struct->StructFlags;
+	}
+	PropertyNode->PropertyPath = Property->GetPathName();
+	PropertyNode->ArrayDim = Property->ArrayDim;
+	PropertyNode->PropertyFlags = Property->PropertyFlags;
+	PropertyNode->DataType = PropertyToSchemaType(Property);
 
 	// Generate a checksum for this PropertyNode to be used to match properties with the RepLayout Cmds later.
 	PropertyNode->CompatibleChecksum = GenerateChecksum(Property, ParentChecksum, StaticArrayIndex);
@@ -372,8 +373,6 @@ TSharedPtr<FUnrealType> CreateUnrealTypeInfo(UStruct* Type, uint32 ParentChecksu
 					if (ObjectProperty == nullptr) continue;
 					TSharedPtr<FUnrealProperty> PropertyNode = PropertyPair.Value;
 
-					PropertyNode->bObjectProperty = true;
-
 					if (ObjectProperty->GetName().Equals(Node->GetVariableName().ToString()))
 					{
 						PropertyNode->Type = CreateUnrealTypeInfo(ObjectProperty->PropertyClass, ParentChecksum, 0, bIsRPC);
@@ -509,15 +508,15 @@ TSharedPtr<FUnrealType> CreateUnrealTypeInfo(UStruct* Type, uint32 ParentChecksu
 	uint16 HandoverDataHandle = 1;
 	VisitAllPropertiesMap(TypeNode, [&HandoverDataHandle, &Class](TSharedPtr<FUnrealProperty> PropertyInfo)
 	{
-		if (PropertyInfo->Property->PropertyFlags & CPF_Handover)
+		if (PropertyInfo->PropertyFlags & CPF_Handover)
 		{
-			if (UStructProperty* StructProp = Cast<UStructProperty>(PropertyInfo->Property))
+			if (PropertyInfo->bStructProperty)
 			{
-				if (StructProp->Struct->StructFlags & STRUCT_NetDeltaSerializeNative)
+				if (PropertyInfo->StructFlags & STRUCT_NetDeltaSerializeNative)
 				{
 					// Warn about delta serialization
 					UE_LOG(LogSpatialGDKSchemaGenerator, Warning, TEXT("%s in %s uses delta serialization. " \
-						"This is not supported and standard serialization will be used instead."), *PropertyInfo->Property->GetName(), *Class->GetName());
+						"This is not supported and standard serialization will be used instead."), *PropertyInfo->PropertyName, *Class->GetName());
 				}
 			}
 			PropertyInfo->HandoverData = MakeShared<FUnrealHandoverData>();
@@ -672,4 +671,100 @@ FSubobjectMap GetAllSubobjects(TSharedPtr<FUnrealType> TypeInfo)
 	}
 
 	return Subobjects;
+}
+
+FString PropertyToSchemaType(UProperty* Property)
+{
+	FString DataType;
+
+	if (Property->IsA(UStructProperty::StaticClass()))
+	{
+		UStructProperty* StructProp = Cast<UStructProperty>(Property);
+		UScriptStruct* Struct = StructProp->Struct;
+		DataType = TEXT("bytes");
+	}
+	else if (Property->IsA(UBoolProperty::StaticClass()))
+	{
+		DataType = TEXT("bool");
+	}
+	else if (Property->IsA(UFloatProperty::StaticClass()))
+	{
+		DataType = TEXT("float");
+	}
+	else if (Property->IsA(UDoubleProperty::StaticClass()))
+	{
+		DataType = TEXT("double");
+	}
+	else if (Property->IsA(UInt8Property::StaticClass()))
+	{
+		DataType = TEXT("int32");
+	}
+	else if (Property->IsA(UInt16Property::StaticClass()))
+	{
+		DataType = TEXT("int32");
+	}
+	else if (Property->IsA(UIntProperty::StaticClass()))
+	{
+		DataType = TEXT("int32");
+	}
+	else if (Property->IsA(UInt64Property::StaticClass()))
+	{
+		DataType = TEXT("int64");
+	}
+	else if (Property->IsA(UByteProperty::StaticClass()))
+	{
+		DataType = TEXT("uint32"); // uint8 not supported in schema.
+	}
+	else if (Property->IsA(UUInt16Property::StaticClass()))
+	{
+		DataType = TEXT("uint32");
+	}
+	else if (Property->IsA(UUInt32Property::StaticClass()))
+	{
+		DataType = TEXT("uint32");
+	}
+	else if (Property->IsA(UUInt64Property::StaticClass()))
+	{
+		DataType = TEXT("uint64");
+	}
+	else if (Property->IsA(UNameProperty::StaticClass()) || Property->IsA(UStrProperty::StaticClass()) || Property->IsA(UTextProperty::StaticClass()))
+	{
+		DataType = TEXT("string");
+	}
+	else if (Property->IsA(UObjectPropertyBase::StaticClass()))
+	{
+		DataType = TEXT("UnrealObjectRef");
+	}
+	else if (Property->IsA(UArrayProperty::StaticClass()))
+	{
+		DataType = PropertyToSchemaType(Cast<UArrayProperty>(Property)->Inner);
+		DataType = FString::Printf(TEXT("list<%s>"), *DataType);
+	}
+	else if (Property->IsA(UEnumProperty::StaticClass()))
+	{
+		DataType = GetEnumDataType(Cast<UEnumProperty>(Property));
+	}
+	else
+	{
+		DataType = TEXT("bytes");
+	}
+
+	return DataType;
+}
+
+FString GetEnumDataType(const UEnumProperty* EnumProperty)
+{
+	FString DataType;
+
+	if (EnumProperty->ElementSize < 4)
+	{
+		// schema types don't include support for 8 or 16 bit data types
+		DataType = TEXT("uint32");
+	}
+	else
+	{
+		DataType = EnumProperty->GetUnderlyingProperty()->GetCPPType();
+	}
+
+	return DataType;
 }

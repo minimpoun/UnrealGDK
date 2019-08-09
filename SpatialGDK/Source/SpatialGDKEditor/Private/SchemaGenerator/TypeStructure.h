@@ -118,7 +118,7 @@ struct FUnrealType
 // A node which represents a single property or parameter in an RPC.
 struct FUnrealProperty
 {
-	UProperty* Property;
+	//UProperty* Property;
 	TSharedPtr<FUnrealType> Type; // Only set if strong reference to object/struct property.
 	TSharedPtr<FUnrealRepData> ReplicationData; // Only set if property is replicated.
 	TSharedPtr<FUnrealHandoverData> HandoverData; // Only set if property is marked for handover (and not replicated).
@@ -131,6 +131,18 @@ struct FUnrealProperty
 	uint32 ParentChecksum;
 
 	bool bObjectProperty;
+	bool bStructProperty;
+	bool bArrayProperty;
+	bool bObjectArrayProperty;
+
+	FString PropertyPath;
+	FString PropertyName;
+
+	int32 ArrayDim;
+	EPropertyFlags PropertyFlags;
+	EStructFlags StructFlags;
+
+	FString DataType;
 };
 
 // A node which represents an RPC.
@@ -187,11 +199,6 @@ ERPCType GetRPCTypeFromFunction(UFunction* Function);
 // Converts an RPC type to string. Used to generate component names.
 FString GetRPCTypeName(ERPCType RPCType);
 
-// Given an AST, this applies the function 'Visitor' to all FUnrealType's contained transitively within the properties. bRecurseIntoObjects will control
-// whether this function will recurse into a UObject's properties, which may not always be desirable. However, it will always recurse into substructs.
-// If the Visitor function returns false, it will not recurse any further into that part of the tree.
-void VisitAllObjects(TSharedPtr<FUnrealType> TypeNode, TFunction<bool(TSharedPtr<FUnrealType>)> Visitor, bool bRecurseIntoSubobjects);
-
 // Similar to 'VisitAllObjects', but instead applies the Visitor function to all properties which are traversed.
 void VisitAllPropertiesMap(TSharedPtr<FUnrealType> TypeNode, TFunction<bool(TSharedPtr<FUnrealProperty>)> Visitor, bool bRecurseIntoSubobjects);
 
@@ -236,3 +243,8 @@ TArray<TSharedPtr<FUnrealProperty>> GetPropertyChain(TSharedPtr<FUnrealProperty>
 FSubobjectMap GetAllSubobjects(TSharedPtr<FUnrealType> TypeInfo);
 
 void CleanPropertyMaps(TSharedPtr<FUnrealType> TypeInfo);
+
+FString PropertyToSchemaType(UProperty* Property);
+
+// Return the string representation of the underlying data type of an enum property
+FString GetEnumDataType(const UEnumProperty* EnumProperty);

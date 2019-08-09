@@ -107,7 +107,7 @@ void CheckIdentifierNameValidity(TSharedPtr<FUnrealType> TypeInfo, bool& bOutSuc
 		{
 			FString NextSchemaReplicatedDataName = SchemaFieldName(RepProp.Value);
 
-			if (!CheckSchemaNameValidity(NextSchemaReplicatedDataName, RepProp.Value->Property->GetPathName(), TEXT("Replicated property")))
+			if (!CheckSchemaNameValidity(NextSchemaReplicatedDataName, RepProp.Value->PropertyPath, TEXT("Replicated property")))
 			{
 				bOutSuccess = false;
 			}
@@ -115,7 +115,7 @@ void CheckIdentifierNameValidity(TSharedPtr<FUnrealType> TypeInfo, bool& bOutSuc
 			if (TSharedPtr<FUnrealProperty>* ExistingReplicatedProperty = SchemaReplicatedDataNames.Find(NextSchemaReplicatedDataName))
 			{
 				UE_LOG(LogSpatialGDKSchemaGenerator, Error, TEXT("Replicated property name collision after removing non-alphanumeric characters, schema not generated. Name '%s' collides for '%s' and '%s'"),
-					*NextSchemaReplicatedDataName, *ExistingReplicatedProperty->Get()->Property->GetPathName(), *RepProp.Value->Property->GetPathName());
+					*NextSchemaReplicatedDataName, *ExistingReplicatedProperty->Get()->PropertyName, *RepProp.Value->PropertyPath);
 				bOutSuccess = false;
 			}
 			else
@@ -132,7 +132,7 @@ void CheckIdentifierNameValidity(TSharedPtr<FUnrealType> TypeInfo, bool& bOutSuc
 	{
 		FString NextSchemaHandoverDataName = SchemaFieldName(Prop.Value);
 
-		if (!CheckSchemaNameValidity(NextSchemaHandoverDataName, Prop.Value->Property->GetPathName(), TEXT("Handover property")))
+		if (!CheckSchemaNameValidity(NextSchemaHandoverDataName, Prop.Value->PropertyPath, TEXT("Handover property")))
 		{
 			bOutSuccess = false;
 		}
@@ -140,7 +140,7 @@ void CheckIdentifierNameValidity(TSharedPtr<FUnrealType> TypeInfo, bool& bOutSuc
 		if (TSharedPtr<FUnrealProperty>* ExistingHandoverData = SchemaHandoverDataNames.Find(NextSchemaHandoverDataName))
 		{
 			UE_LOG(LogSpatialGDKSchemaGenerator, Error, TEXT("Handover data name collision after removing non-alphanumeric characters, schema not generated. Name '%s' collides for '%s' and '%s'"),
-				*NextSchemaHandoverDataName, *ExistingHandoverData->Get()->Property->GetPathName(), *Prop.Value->Property->GetPathName());
+				*NextSchemaHandoverDataName, *ExistingHandoverData->Get()->PropertyPath, *Prop.Value->PropertyPath);
 			bOutSuccess = false;
 		}
 		else

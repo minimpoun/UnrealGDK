@@ -58,102 +58,10 @@ ESchemaComponentType RPCTypeToSchemaComponentType(ERPCType RPC)
 
 }
 
-// Given a RepLayout cmd type (a data type supported by the replication system). Generates the corresponding
-// type used in schema.
-FString PropertyToSchemaType(UProperty* Property, bool bIsRPCProperty)
-{
-	FString DataType;
-
-	// For RPC arguments we may wish to handle them differently.
-	if (bIsRPCProperty)
-	{
-		if (Property->ArrayDim > 1) // Static arrays in RPC arguments are replicated as lists.
-		{
-			DataType = PropertyToSchemaType(Property, false); // Have to get the type of the property inside the static array.
-			DataType = FString::Printf(TEXT("list<%s>"), *DataType);
-			return DataType;
-		}
-	}
-
-	if (Property->IsA(UStructProperty::StaticClass()))
-	{
-		UStructProperty* StructProp = Cast<UStructProperty>(Property);
-		UScriptStruct* Struct = StructProp->Struct;
-		DataType = TEXT("bytes");
-	}
-	else if (Property->IsA(UBoolProperty::StaticClass()))
-	{
-		DataType = TEXT("bool");
-	}
-	else if (Property->IsA(UFloatProperty::StaticClass()))
-	{
-		DataType = TEXT("float");
-	}
-	else if (Property->IsA(UDoubleProperty::StaticClass()))
-	{
-		DataType = TEXT("double");
-	}
-	else if (Property->IsA(UInt8Property::StaticClass()))
-	{
-		DataType = TEXT("int32");
-	}
-	else if (Property->IsA(UInt16Property::StaticClass()))
-	{
-		DataType = TEXT("int32");
-	}
-	else if (Property->IsA(UIntProperty::StaticClass()))
-	{
-		DataType = TEXT("int32");
-	}
-	else if (Property->IsA(UInt64Property::StaticClass()))
-	{
-		DataType = TEXT("int64");
-	}
-	else if (Property->IsA(UByteProperty::StaticClass()))
-	{
-		DataType = TEXT("uint32"); // uint8 not supported in schema.
-	}
-	else if (Property->IsA(UUInt16Property::StaticClass()))
-	{
-		DataType = TEXT("uint32");
-	}
-	else if (Property->IsA(UUInt32Property::StaticClass()))
-	{
-		DataType = TEXT("uint32");
-	}
-	else if (Property->IsA(UUInt64Property::StaticClass()))
-	{
-		DataType = TEXT("uint64");
-	}
-	else if (Property->IsA(UNameProperty::StaticClass()) || Property->IsA(UStrProperty::StaticClass()) || Property->IsA(UTextProperty::StaticClass()))
-	{
-		DataType = TEXT("string");
-	}
-	else if (Property->IsA(UObjectPropertyBase::StaticClass()))
-	{
-		DataType = TEXT("UnrealObjectRef");
-	}
-	else if (Property->IsA(UArrayProperty::StaticClass()))
-	{
-		DataType = PropertyToSchemaType(Cast<UArrayProperty>(Property)->Inner, bIsRPCProperty);
-		DataType = FString::Printf(TEXT("list<%s>"), *DataType);
-	}
-	else if (Property->IsA(UEnumProperty::StaticClass()))
-	{
-		DataType = GetEnumDataType(Cast<UEnumProperty>(Property));
-	}
-	else
-	{
-		DataType = TEXT("bytes");
-	}
-
-	return DataType;
-}
-
 void WriteSchemaRepField(FCodeWriter& Writer, const TSharedPtr<FUnrealProperty> RepProp, const int FieldCounter)
 {
 	Writer.Printf("{0} {1} = {2};",
-		*PropertyToSchemaType(RepProp->Property, false),
+		*RepProp->DataType,
 		*SchemaFieldName(RepProp),
 		FieldCounter
 	);
@@ -162,7 +70,7 @@ void WriteSchemaRepField(FCodeWriter& Writer, const TSharedPtr<FUnrealProperty> 
 void WriteSchemaHandoverField(FCodeWriter& Writer, const TSharedPtr<FUnrealProperty> HandoverProp, const int FieldCounter)
 {
 	Writer.Printf("{0} {1} = {2};",
-		*PropertyToSchemaType(HandoverProp->Property, false),
+		*HandoverProp->DataType,
 		*SchemaFieldName(HandoverProp),
 		FieldCounter
 	);
@@ -171,7 +79,7 @@ void WriteSchemaHandoverField(FCodeWriter& Writer, const TSharedPtr<FUnrealPrope
 void WriteSchemaRPCField(TSharedPtr<FCodeWriter> Writer, const TSharedPtr<FUnrealProperty> RPCProp, const int FieldCounter)
 {
 	Writer->Printf("{0} {1} = {2};",
-		*PropertyToSchemaType(RPCProp->Property, true),
+		*RPCProp->DataType,
 		*SchemaFieldName(RPCProp),
 		FieldCounter
 	);
@@ -217,15 +125,14 @@ void GenerateSubobjectSchema(FComponentIdGenerator& IdGenerator, TSharedPtr<FUnr
 	{
 		for (auto& PropertyPair : PropertyGroup.Value)
 		{
-			UProperty* Property = PropertyPair.Value->Property;
-			if (Property->IsA<UObjectPropertyBase>())
+			if (PropertyPair.Value->bObjectProperty)
 			{
 				bShouldIncludeCoreTypes = true;
 			}
 
-			if (Property->IsA<UArrayProperty>())
+			if (PropertyPair.Value->bArrayProperty)
 			{
-				if (Cast<UArrayProperty>(Property)->Inner->IsA<UObjectPropertyBase>())
+				if (PropertyPair.Value->bObjectArrayProperty)
 				{
 					bShouldIncludeCoreTypes = true;
 				}
@@ -250,7 +157,7 @@ void GenerateSubobjectSchema(FComponentIdGenerator& IdGenerator, TSharedPtr<FUnr
 		}
 
 		// If this class is an Actor Component, it MUST have bReplicates at field ID 1.
-		if (Group == REP_MultiClient && TypeInfo->bIsActorComponent)
+		/*if (Group == REP_MultiClient && TypeInfo->bIsActorComponent)
 		{
 			TSharedPtr<FUnrealProperty> ExpectedReplicatesPropData = RepData[Group].FindRef(SpatialConstants::ACTOR_COMPONENT_REPLICATES_ID);
 			const UProperty* ReplicatesProp = UActorComponent::StaticClass()->FindPropertyByName("bReplicates");
@@ -261,7 +168,7 @@ void GenerateSubobjectSchema(FComponentIdGenerator& IdGenerator, TSharedPtr<FUnr
 					SpatialConstants::ACTOR_COMPONENT_REPLICATES_ID,
 					*TypeInfo->ClassName);
 			}
-		}
+		}*/
 
 		Writer.PrintNewLine();
 		Writer.Printf("type {0} {", *SchemaReplicatedDataName(Group, TypeInfo->ClassPath));
@@ -409,7 +316,7 @@ void GenerateActorSchema(FComponentIdGenerator& IdGenerator, TSharedPtr<FUnrealT
 		}
 
 		// If this class is an Actor, it MUST have bTearOff at field ID 3.	
-		if (Group == REP_MultiClient && TypeInfo->bIsActorClass)
+		/*if (Group == REP_MultiClient && TypeInfo->bIsActorClass)
 		{
 			TSharedPtr<FUnrealProperty> ExpectedReplicatesPropData = RepData[Group].FindRef(SpatialConstants::ACTOR_TEAROFF_ID);
 			const UProperty* ReplicatesProp = AActor::StaticClass()->FindPropertyByName("bTearOff");
@@ -420,7 +327,7 @@ void GenerateActorSchema(FComponentIdGenerator& IdGenerator, TSharedPtr<FUnrealT
 					SpatialConstants::ACTOR_TEAROFF_ID,
 					*TypeInfo->ClassName);
 			}
-		}
+		}*/
 
 		Worker_ComponentId ComponentId = 0;
 		if (SchemaData != nullptr && SchemaData->SchemaComponents[PropertyGroupToSchemaComponentType(Group)] != 0)
