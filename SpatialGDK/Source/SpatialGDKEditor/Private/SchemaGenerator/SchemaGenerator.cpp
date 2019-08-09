@@ -624,14 +624,11 @@ void GenerateSubobjectSchemaForActorIncludes(FCodeWriter& Writer, TSharedPtr<FUn
 {
 	TSet<FString> AlreadyImported;
 
-	for (auto& PropertyPair : TypeInfo->Properties)
+	for (auto& PropertyInfo : TypeInfo->PropertiesList)
 	{
-		UProperty* Property = PropertyPair.Key;
-		UObjectProperty* ObjectProperty = Cast<UObjectProperty>(Property);
+		TSharedPtr<FUnrealType>& PropertyTypeInfo = PropertyInfo->Type;
 
-		TSharedPtr<FUnrealType>& PropertyTypeInfo = PropertyPair.Value->Type;
-
-		if (ObjectProperty && PropertyTypeInfo.IsValid())
+		if (PropertyInfo->bObjectProperty && PropertyTypeInfo.IsValid())
 		{
 			if (!PropertyTypeInfo->bObjectEditorOnly)
 			{

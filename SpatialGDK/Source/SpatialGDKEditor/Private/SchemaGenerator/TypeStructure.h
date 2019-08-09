@@ -105,7 +105,8 @@ struct FUnrealType
 	FString ObjectPath; // Path for the object. Either a CDO etc etc blah blah.
 	bool bObjectEditorOnly;
 	FName Name; // Name for the object. This is either the name of the object itself, or the name of the property in the blueprint
-	TMultiMap<UProperty*, TSharedPtr<FUnrealProperty>> Properties;
+	TMultiMap<UProperty*, TSharedPtr<FUnrealProperty>> PropertiesMap; // Only needed at generation time.
+	TArray<TSharedPtr<FUnrealProperty>> PropertiesList;
 	TMap<UFunction*, TSharedPtr<FUnrealRPC>> RPCs;
 	TWeakPtr<FUnrealProperty> ParentProperty;
 	bool bIsActorClass;
@@ -128,6 +129,8 @@ struct FUnrealProperty
 	int32 StaticArrayIndex;
 	uint32 CompatibleChecksum;
 	uint32 ParentChecksum;
+
+	bool bObjectProperty;
 };
 
 // A node which represents an RPC.
@@ -192,10 +195,12 @@ FString GetRPCTypeName(ERPCType RPCType);
 void VisitAllObjects(TSharedPtr<FUnrealType> TypeNode, TFunction<bool(TSharedPtr<FUnrealType>)> Visitor, bool bRecurseIntoSubobjects);
 
 // Similar to 'VisitAllObjects', but instead applies the Visitor function to all properties which are traversed.
-void VisitAllProperties(TSharedPtr<FUnrealType> TypeNode, TFunction<bool(TSharedPtr<FUnrealProperty>)> Visitor, bool bRecurseIntoSubobjects);
+void VisitAllPropertiesMap(TSharedPtr<FUnrealType> TypeNode, TFunction<bool(TSharedPtr<FUnrealProperty>)> Visitor, bool bRecurseIntoSubobjects);
+
+void VisitAllPropertiesList(TSharedPtr<FUnrealType> TypeNode, TFunction<bool(TSharedPtr<FUnrealProperty>)> Visitor, bool bRecurseIntoSubobjects);
 
 // Similar to 'VisitAllObjects', but instead applies the Visitor function to all parameters in an RPC (and subproperties of structs/objects where appropriate).
-void VisitAllProperties(TSharedPtr<FUnrealRPC> RPCNode, TFunction<bool(TSharedPtr<FUnrealProperty>)> Visitor, bool bRecurseIntoSubobjects);
+//void VisitAllProperties(TSharedPtr<FUnrealRPC> RPCNode, TFunction<bool(TSharedPtr<FUnrealProperty>)> Visitor, bool bRecurseIntoSubobjects);
 
 // Generates a unique checksum for the Property that allows matching to Unreal's RepLayout Cmds.
 uint32 GenerateChecksum(UProperty* Property, uint32 ParentChecksum, int32 StaticArrayIndex);
@@ -231,3 +236,5 @@ TArray<TSharedPtr<FUnrealProperty>> GetPropertyChain(TSharedPtr<FUnrealProperty>
 
 // Get all default subobjects for an actor.
 FSubobjectMap GetAllSubobjects(TSharedPtr<FUnrealType> TypeInfo);
+
+void CleanPropertyMaps(TSharedPtr<FUnrealType> TypeInfo);

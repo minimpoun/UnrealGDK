@@ -110,7 +110,7 @@ FString GetRPCTypeName(ERPCType RPCType)
 void VisitAllObjects(TSharedPtr<FUnrealType> TypeNode, TFunction<bool(TSharedPtr<FUnrealType>)> Visitor, bool bRecurseIntoSubobjects)
 {
 	bool bShouldRecurseFurther = Visitor(TypeNode);
-	for (auto& PropertyPair : TypeNode->Properties)
+	for (auto& PropertyPair : TypeNode->PropertiesMap)
 	{
 		if (bShouldRecurseFurther && PropertyPair.Value->Type.IsValid())
 		{
@@ -123,9 +123,9 @@ void VisitAllObjects(TSharedPtr<FUnrealType> TypeNode, TFunction<bool(TSharedPtr
 	}
 }
 
-void VisitAllProperties(TSharedPtr<FUnrealType> TypeNode, TFunction<bool(TSharedPtr<FUnrealProperty>)> Visitor, bool bRecurseIntoSubobjects)
+void VisitAllPropertiesMap(TSharedPtr<FUnrealType> TypeNode, TFunction<bool(TSharedPtr<FUnrealProperty>)> Visitor, bool bRecurseIntoSubobjects)
 {
-	for (auto& PropertyPair : TypeNode->Properties)
+	for (auto& PropertyPair : TypeNode->PropertiesMap)
 	{
 		bool bShouldRecurseFurther = Visitor(PropertyPair.Value);
 		if (bShouldRecurseFurther && PropertyPair.Value->Type.IsValid())
@@ -133,27 +133,43 @@ void VisitAllProperties(TSharedPtr<FUnrealType> TypeNode, TFunction<bool(TShared
 			// Either recurse into subobjects if they're structs or bRecurseIntoSubobjects is true.
 			if (bRecurseIntoSubobjects || PropertyPair.Value->Property->IsA<UStructProperty>())
 			{
-				VisitAllProperties(PropertyPair.Value->Type, Visitor, bRecurseIntoSubobjects);
+				VisitAllPropertiesMap(PropertyPair.Value->Type, Visitor, bRecurseIntoSubobjects);
 			}
 		}
 	}
 }
 
-void VisitAllProperties(TSharedPtr<FUnrealRPC> RPCNode, TFunction<bool(TSharedPtr<FUnrealProperty>)> Visitor, bool bRecurseIntoSubobjects)
+void VisitAllPropertiesList(TSharedPtr<FUnrealType> TypeNode, TFunction<bool(TSharedPtr<FUnrealProperty>)> Visitor, bool bRecurseIntoSubobjects)
 {
-	for (auto& PropertyPair : RPCNode->Parameters)
+	for (auto& PropertyInfo : TypeNode->PropertiesList)
 	{
-		bool bShouldRecurseFurther = Visitor(PropertyPair.Value);
-		if (bShouldRecurseFurther && PropertyPair.Value->Type.IsValid())
+		bool bShouldRecurseFurther = Visitor(PropertyInfo);
+		if (bShouldRecurseFurther && PropertyInfo->Type.IsValid())
 		{
 			// Either recurse into subobjects if they're structs or bRecurseIntoSubobjects is true.
-			if (bRecurseIntoSubobjects || PropertyPair.Value->Property->IsA<UStructProperty>())
+			if (bRecurseIntoSubobjects || PropertyInfo->Property->IsA<UStructProperty>())
 			{
-				VisitAllProperties(PropertyPair.Value->Type, Visitor, bRecurseIntoSubobjects);
+				VisitAllPropertiesList(PropertyInfo->Type, Visitor, bRecurseIntoSubobjects);
 			}
 		}
 	}
 }
+
+//void VisitAllProperties(TSharedPtr<FUnrealRPC> RPCNode, TFunction<bool(TSharedPtr<FUnrealProperty>)> Visitor, bool bRecurseIntoSubobjects)
+//{
+//	for (auto& PropertyPair : RPCNode->Parameters)
+//	{
+//		bool bShouldRecurseFurther = Visitor(PropertyPair.Value);
+//		if (bShouldRecurseFurther && PropertyPair.Value->Type.IsValid())
+//		{
+//			// Either recurse into subobjects if they're structs or bRecurseIntoSubobjects is true.
+//			if (bRecurseIntoSubobjects || PropertyPair.Value->Property->IsA<UStructProperty>())
+//			{
+//				VisitAllProperties(PropertyPair.Value->Type, Visitor, bRecurseIntoSubobjects);
+//			}
+//		}
+//	}
+//}
 
 // GenerateChecksum is a method which replicates how Unreal generates it's own CompatibleChecksum for RepLayout Cmds.
 // The original code can be found in the Unreal Engine's RepLayout. We use this to ensure we have the correct property at run-time.
@@ -176,7 +192,8 @@ TSharedPtr<FUnrealProperty> CreateUnrealProperty(TSharedPtr<FUnrealType> TypeNod
 
 	// Generate a checksum for this PropertyNode to be used to match properties with the RepLayout Cmds later.
 	PropertyNode->CompatibleChecksum = GenerateChecksum(Property, ParentChecksum, StaticArrayIndex);
-	TypeNode->Properties.Add(Property, PropertyNode);
+	TypeNode->PropertiesMap.Add(Property, PropertyNode);
+	TypeNode->PropertiesList.Add(PropertyNode);
 	return PropertyNode;
 }
 
@@ -278,7 +295,7 @@ TSharedPtr<FUnrealType> CreateUnrealTypeInfo(UStruct* Type, uint32 ParentChecksu
 			if (Value->IsEditorOnly())
 			{
 				UE_LOG(LogSpatialGDKSchemaGenerator, Verbose, TEXT("%s - editor only, skipping"), *Property->GetName());
-				TypeNode->Properties.Remove(Property);
+				TypeNode->PropertiesMap.Remove(Property);
 				continue;
 			}
 
@@ -349,11 +366,13 @@ TSharedPtr<FUnrealType> CreateUnrealTypeInfo(UStruct* Type, uint32 ParentChecksu
 					continue;
 				}
 
-				for (auto& PropertyPair : TypeNode->Properties)
+				for (auto& PropertyPair : TypeNode->PropertiesMap)
 				{
 					UObjectProperty* ObjectProperty = Cast<UObjectProperty>(PropertyPair.Key);
 					if (ObjectProperty == nullptr) continue;
 					TSharedPtr<FUnrealProperty> PropertyNode = PropertyPair.Value;
+
+					PropertyNode->bObjectProperty = true;
 
 					if (ObjectProperty->GetName().Equals(Node->GetVariableName().ToString()))
 					{
@@ -460,7 +479,7 @@ TSharedPtr<FUnrealType> CreateUnrealTypeInfo(UStruct* Type, uint32 ParentChecksu
 		if (Parent.Property == Cmd.Property)
 		{
 			// Make sure we have the correct property via the checksums.
-			for (auto& PropertyPair : TypeNode->Properties)
+			for (auto& PropertyPair : TypeNode->PropertiesMap)
 			{
 				if (PropertyPair.Value->CompatibleChecksum == Cmd.CompatibleChecksum)
 				{
@@ -472,12 +491,12 @@ TSharedPtr<FUnrealType> CreateUnrealTypeInfo(UStruct* Type, uint32 ParentChecksu
 		{
 			// It's possible to have duplicate parent properties (they are distinguished by ArrayIndex), so we make sure to look at them all.
 			TArray<TSharedPtr<FUnrealProperty>> RootProperties;
-			TypeNode->Properties.MultiFind(Parent.Property, RootProperties);
+			TypeNode->PropertiesMap.MultiFind(Parent.Property, RootProperties);
 
 			for (TSharedPtr<FUnrealProperty>& RootProperty : RootProperties)
 			{
 				checkf(RootProperty->Type.IsValid(), TEXT("Properties in the AST which are parent properties in the rep layout must have child properties"));
-				VisitAllProperties(RootProperty->Type, [&PropertyNode, &Cmd](TSharedPtr<FUnrealProperty> Property)
+				VisitAllPropertiesMap(RootProperty->Type, [&PropertyNode, &Cmd](TSharedPtr<FUnrealProperty> Property)
 				{
 					if (Property->CompatibleChecksum == Cmd.CompatibleChecksum)
 					{
@@ -517,7 +536,7 @@ TSharedPtr<FUnrealType> CreateUnrealTypeInfo(UStruct* Type, uint32 ParentChecksu
 
 	// Find the handover properties.
 	uint16 HandoverDataHandle = 1;
-	VisitAllProperties(TypeNode, [&HandoverDataHandle, &Class](TSharedPtr<FUnrealProperty> PropertyInfo)
+	VisitAllPropertiesMap(TypeNode, [&HandoverDataHandle, &Class](TSharedPtr<FUnrealProperty> PropertyInfo)
 	{
 		if (PropertyInfo->Property->PropertyFlags & CPF_Handover)
 		{
@@ -536,7 +555,27 @@ TSharedPtr<FUnrealType> CreateUnrealTypeInfo(UStruct* Type, uint32 ParentChecksu
 		return true;
 	}, false);
 
+	if (ParentChecksum == 0)
+	{
+		CleanPropertyMaps(TypeNode);
+	}
+
 	return TypeNode;
+}
+
+void CleanPropertyMaps(TSharedPtr<FUnrealType> TypeInfo)
+{
+	if (!TypeInfo.IsValid())
+	{
+		return;
+	}
+
+	TypeInfo->PropertiesMap.Empty();
+
+	for (auto& PropertyInfo : TypeInfo->PropertiesList)
+	{
+		CleanPropertyMaps(PropertyInfo->Type);
+	}
 }
 
 FUnrealFlatRepData GetFlatRepData(TSharedPtr<FUnrealType> TypeInfo)
@@ -545,7 +584,7 @@ FUnrealFlatRepData GetFlatRepData(TSharedPtr<FUnrealType> TypeInfo)
 	RepData.Add(REP_MultiClient);
 	RepData.Add(REP_SingleClient);
 
-	VisitAllProperties(TypeInfo, [&RepData](TSharedPtr<FUnrealProperty> PropertyInfo)
+	VisitAllPropertiesList(TypeInfo, [&RepData](TSharedPtr<FUnrealProperty> PropertyInfo)
 	{
 		if (PropertyInfo->ReplicationData.IsValid())
 		{
@@ -577,7 +616,7 @@ FUnrealFlatRepData GetFlatRepData(TSharedPtr<FUnrealType> TypeInfo)
 FCmdHandlePropertyMap GetFlatHandoverData(TSharedPtr<FUnrealType> TypeInfo)
 {
 	FCmdHandlePropertyMap HandoverData;
-	VisitAllProperties(TypeInfo, [&HandoverData](TSharedPtr<FUnrealProperty> PropertyInfo)
+	VisitAllPropertiesList(TypeInfo, [&HandoverData](TSharedPtr<FUnrealProperty> PropertyInfo)
 	{
 		if (PropertyInfo->HandoverData.IsValid())
 		{
@@ -659,12 +698,11 @@ FSubobjectMap GetAllSubobjects(TSharedPtr<FUnrealType> TypeInfo)
 	TSet<FString> SeenComponents;
 	uint32 CurrentOffset = 1;
 
-	for (auto& PropertyPair : TypeInfo->Properties)
+	for (auto& PropertyInfo : TypeInfo->PropertiesList)
 	{
-		UProperty* Property = PropertyPair.Key;
-		TSharedPtr<FUnrealType>& PropertyTypeInfo = PropertyPair.Value->Type;
+		TSharedPtr<FUnrealType>& PropertyTypeInfo = PropertyInfo->Type;
 
-		if (Property->IsA<UObjectProperty>() && PropertyTypeInfo.IsValid())
+		if (PropertyInfo->bObjectProperty && PropertyTypeInfo.IsValid())
 		{
 			if (!PropertyTypeInfo->bObjectEditorOnly)
 			{
