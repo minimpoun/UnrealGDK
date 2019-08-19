@@ -10,6 +10,7 @@
 #include "ISettingsSection.h"
 #include "PropertyEditor/Public/PropertyEditorModule.h"
 #include "WorkerTypeCustomization.h"
+#include "SpatialGDKEditorSchemaGenerator.h"
 
 #define LOCTEXT_NAMESPACE "FSpatialGDKEditorModule"
 

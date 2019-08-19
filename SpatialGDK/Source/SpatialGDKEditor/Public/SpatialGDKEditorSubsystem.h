@@ -14,6 +14,9 @@ class SPATIALGDKEDITOR_API USpatialGDKEditorSubsystem : public UEditorSubsystem
 {
 	GENERATED_BODY()
 
+	UPROPERTY()
+	class USchemaDatabase* SchemaDatabase;
+
 	// Begin USubsystem
 	virtual void Initialize(FSubsystemCollectionBase& Collection) override;
 	virtual void Deinitialize() override;

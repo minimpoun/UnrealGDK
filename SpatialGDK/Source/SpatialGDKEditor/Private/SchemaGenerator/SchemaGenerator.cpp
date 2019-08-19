@@ -480,6 +480,11 @@ void GenerateSubobjectSchemaForActor(FComponentIdGenerator& IdGenerator, TShared
 
 	Writer.PrintNewLine();
 
+	if (TypeInfo->ClassPath == TEXT("/Game/VFX/BP_BulletTracer.BP_BulletTracer_C"))
+	{
+		UE_LOG(LogTemp, Display, TEXT("FOUND IT"));
+	}
+
 	GenerateSubobjectSchemaForActorIncludes(Writer, TypeInfo);
 
 	FSubobjectMap Subobjects = GetAllSubobjects(TypeInfo);
@@ -495,6 +500,11 @@ void GenerateSubobjectSchemaForActor(FComponentIdGenerator& IdGenerator, TShared
 		if (SchemaGeneratedClassPaths.Contains(SubobjectTypeInfo->ClassPath))
 		{
 			bHasComponents = true;
+
+			if (TypeInfo->ClassPath == TEXT("/Game/Blueprints/Weapons/BP_AutomaticRifle.BP_AutomaticRifle_C"))
+			{
+				bool bar = false;
+			}
 
 			const FActorSpecificSubobjectSchemaData* ExistingSubobjectSchemaData = nullptr;
 			if (ExistingSchemaData != nullptr)
@@ -512,6 +522,7 @@ void GenerateSubobjectSchemaForActor(FComponentIdGenerator& IdGenerator, TShared
 		}
 		else
 		{
+			UE_LOG(LogTemp, Error, TEXT("Unable to generate"))
 			continue;
 		}
 

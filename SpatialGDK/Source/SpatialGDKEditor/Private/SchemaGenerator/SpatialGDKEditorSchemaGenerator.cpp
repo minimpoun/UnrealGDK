@@ -69,6 +69,10 @@ void OnStatusOutput(FString Message)
 
 void GenerateCompleteSchemaFromClass(FString SchemaPath, FComponentIdGenerator& IdGenerator, TSharedPtr<FUnrealType> TypeInfo)
 {
+	if (TypeInfo->ClassPath == "/Game/VFX/BP_BulletTracer.BP_BulletTracer_C")
+	{
+		UE_LOG(LogTemp, Display, TEXT("Found it"));
+	}
 	if (TypeInfo->bIsActorClass)
 	{
 		GenerateActorSchema(IdGenerator, TypeInfo, SchemaPath);
@@ -427,47 +431,70 @@ void SaveSchemaDatabase()
 	}
 }
 
-TArray<UClass*> GetAllSupportedClasses()
+bool IsSupportedClass(UClass* SupportedClass)
 {
-	TSet<UClass*> Classes;
 	const TArray<FDirectoryPath>& DirectoriesToNeverCook = GetDefault<UProjectPackagingSettings>()->DirectoriesToNeverCook;
 
-	for (TObjectIterator<UClass> ClassIt; ClassIt; ++ClassIt)
+	// User told us to ignore this class
+	if (SupportedClass->HasAnySpatialClassFlags(SPATIALCLASS_NotSpatialType))
 	{
-		// User told us to ignore this class
-		if (ClassIt->HasAnySpatialClassFlags(SPATIALCLASS_NotSpatialType))
-		{
-			continue;
-		}
-
-		UClass* SupportedClass = *ClassIt;
-
-		// Ensure we don't process transient generated classes for BP
-		if (SupportedClass->GetName().StartsWith(TEXT("SKEL_"), ESearchCase::CaseSensitive)
-			|| SupportedClass->GetName().StartsWith(TEXT("REINST_"), ESearchCase::CaseSensitive)
-			|| SupportedClass->GetName().StartsWith(TEXT("TRASHCLASS_"), ESearchCase::CaseSensitive)
-			|| SupportedClass->GetName().StartsWith(TEXT("HOTRELOADED_"), ESearchCase::CaseSensitive)
-			|| SupportedClass->GetName().StartsWith(TEXT("PROTO_BP_"), ESearchCase::CaseSensitive)
-			|| SupportedClass->GetName().StartsWith(TEXT("PLACEHOLDER-CLASS_"), ESearchCase::CaseSensitive)
-			|| SupportedClass->GetName().StartsWith(TEXT("ORPHANED_DATA_ONLY_"), ESearchCase::CaseSensitive))
-		{
-			continue;
-		}
-
-		// Avoid processing classes contained in Directories to Never Cook
-		const FString& ClassPath = SupportedClass->GetPathName();
-		if (DirectoriesToNeverCook.ContainsByPredicate([&ClassPath](const FDirectoryPath& Directory)
-		{
-			return ClassPath.StartsWith(Directory.Path);
-		}))
-		{
-			continue;
-		}
-
-		Classes.Add(SupportedClass);
+		return false;
 	}
 
-	return Classes.Array();
+	// Ensure we don't process transient generated classes for BP
+	if (SupportedClass->GetName().StartsWith(TEXT("SKEL_"), ESearchCase::CaseSensitive)
+		|| SupportedClass->GetName().StartsWith(TEXT("REINST_"), ESearchCase::CaseSensitive)
+		|| SupportedClass->GetName().StartsWith(TEXT("TRASHCLASS_"), ESearchCase::CaseSensitive)
+		|| SupportedClass->GetName().StartsWith(TEXT("HOTRELOADED_"), ESearchCase::CaseSensitive)
+		|| SupportedClass->GetName().StartsWith(TEXT("PROTO_BP_"), ESearchCase::CaseSensitive)
+		|| SupportedClass->GetName().StartsWith(TEXT("PLACEHOLDER-CLASS_"), ESearchCase::CaseSensitive)
+		|| SupportedClass->GetName().StartsWith(TEXT("ORPHANED_DATA_ONLY_"), ESearchCase::CaseSensitive))
+	{
+		return false;
+	}
+
+	// Avoid processing classes contained in Directories to Never Cook
+	const FString& ClassPath = SupportedClass->GetPathName();
+	if (DirectoriesToNeverCook.ContainsByPredicate([&ClassPath](const FDirectoryPath& Directory)
+	{
+		return ClassPath.StartsWith(Directory.Path);
+	}))
+	{
+		return false;
+	}
+
+	return true;
+}
+
+TArray<UClass*> GetAllSupportedClasses()
+{
+	TArray<UClass*> SupportedClasses;
+	for (TObjectIterator<UClass> ClassIt; ClassIt; ++ClassIt)
+	{
+		UClass* SupportedClass = *ClassIt;
+
+		if (IsSupportedClass(SupportedClass))
+		{
+			SupportedClasses.Add(SupportedClass);
+		}
+	}
+
+	return SupportedClasses;
+}
+
+TArray<UClass*> FilterSupportedClasses(TSet<UClass*> PotentialClasses)
+{
+	TArray<UClass*> SupportedClasses;
+
+	for (auto& PotentialClass : PotentialClasses)
+	{
+		if (IsSupportedClass(PotentialClass))
+		{
+			SupportedClasses.Add(PotentialClass);
+		}
+	}
+
+	return SupportedClasses;
 }
 
 void CopyWellKnownSchemaFiles()
@@ -535,11 +562,12 @@ void ClearGeneratedSchema()
 	DeleteGeneratedSchemaFiles();
 }
 
-bool TryLoadExistingSchemaDatabase()
+USchemaDatabase* TryLoadExistingSchemaDatabase()
 {
 	const FString SchemaDatabasePackagePath = TEXT("/Game/Spatial/SchemaDatabase");
 	const FString SchemaDatabaseAssetPath = FString::Printf(TEXT("%s.SchemaDatabase"), *SchemaDatabasePackagePath);
 	const FString SchemaDatabaseFileName = FPackageName::LongPackageNameToFilename(SchemaDatabasePackagePath, FPackageName::GetAssetPackageExtension());
+	USchemaDatabase* SchemaDatabase = nullptr;
 
 	FFileStatData StatData = FPlatformFileManager::Get().GetPlatformFile().GetStatData(*SchemaDatabaseFileName);
 
@@ -548,15 +576,15 @@ bool TryLoadExistingSchemaDatabase()
 		if (StatData.bIsReadOnly)
 		{
 			UE_LOG(LogSpatialGDKSchemaGenerator, Error, TEXT("Schema Generation failed: Schema Database at %s%s is read only. Make it writable before generating schema"), *SchemaDatabasePackagePath, *FPackageName::GetAssetPackageExtension());
-			return false;
+			return nullptr;
 		}
 
-		const USchemaDatabase* const SchemaDatabase = Cast<USchemaDatabase>(FSoftObjectPath(SchemaDatabaseAssetPath).TryLoad());
+		SchemaDatabase = Cast<USchemaDatabase>(FSoftObjectPath(SchemaDatabaseAssetPath).TryLoad());
 
 		if (SchemaDatabase == nullptr)
 		{
 			UE_LOG(LogSpatialGDKSchemaGenerator, Error, TEXT("Schema Generation failed: Failed to load existing schema database."));
-			return false;
+			return nullptr;
 		}
 
 		ActorClassPathToSchema = SchemaDatabase->ActorClassPathToSchema;
@@ -578,7 +606,7 @@ bool TryLoadExistingSchemaDatabase()
 		ClearGeneratedSchema();
 	}
 
-	return true;
+	return SchemaDatabase;
 }
 
 SPATIALGDKEDITOR_API bool GeneratedSchemaFolderExists()
@@ -662,24 +690,53 @@ void RunSchemaCompiler()
 	}
 }
 
-bool SpatialGDKGenerateSchema()
+bool SpatialGDKGenerateSchema(TSet<UClass*> SpecificClasses, bool bSaveSchemaDatabase)
 {
 	ResetUsedNames();
 
-	// Gets the classes currently loaded into memory.
-	SchemaGeneratedClasses = GetAllSupportedClasses();
+	if (SpecificClasses.Num() > 0)
+	{
+		UE_LOG(LogTemp, Display, TEXT("==== Filtered Classes ===="))
+		SchemaGeneratedClasses = FilterSupportedClasses(SpecificClasses);
+
+		for (auto Filtered : SchemaGeneratedClasses)
+		{
+			UE_LOG(LogTemp, Display, TEXT("Class [%s]"), *GetPathNameSafe(Filtered));
+		}
+	}
+	else
+	{
+		SchemaGeneratedClasses = GetAllSupportedClasses();
+	}
+
 	SchemaGeneratedClasses.Sort();
 
 	// Generate Type Info structs for all classes
 	TArray<TSharedPtr<FUnrealType>> TypeInfos;
 
+	UE_LOG(LogTemp, Display, TEXT("Create Type Infos..."));
 	for (const auto& Class : SchemaGeneratedClasses)
 	{
 		// Parent and static array index start at 0 for checksum calculations.
 		TSharedPtr<FUnrealType> TypeInfo = CreateUnrealTypeInfo(Class, 0, 0, false);
 		TypeInfos.Add(TypeInfo);
 		SchemaGeneratedClassPaths.Add(TypeInfo->ClassPath);
+		VisitAllObjects(TypeInfo, [&](TSharedPtr<FUnrealType> TypeNode) {
+			if (!SchemaGeneratedClassPaths.Contains(TypeNode->ClassPath))
+			{
+				TypeInfos.Add(TypeNode);
+				SchemaGeneratedClassPaths.Add(TypeNode->ClassPath);
+			}
+			return true;
+		}, true);
+		
 	}
+
+	for (const auto TypeInfo : TypeInfos)
+	{
+		UE_LOG(LogTemp, Display, TEXT("Type Info: [%s]"), *TypeInfo->ClassPath);
+	}
+	UE_LOG(LogTemp, Display, TEXT("Create Type Infos...Done"));
 
 	if (!ValidateIdentifierNames(TypeInfos))
 	{
@@ -701,11 +758,30 @@ bool SpatialGDKGenerateSchema()
 
 	FComponentIdGenerator IdGenerator = FComponentIdGenerator(NextAvailableComponentId);
 
+	UE_LOG(LogTemp, Display, TEXT("Generate Schema From Classes..."));
 	GenerateSchemaFromClasses(TypeInfos, SchemaOutputPath, IdGenerator);
+	UE_LOG(LogTemp, Display, TEXT("Generate Schema From Classes...Done"));
+	UE_LOG(LogTemp, Display, TEXT("Generate Schema From Sublevels...Done"));
 	GenerateSchemaForSublevels(SchemaOutputPath, IdGenerator);
 	NextAvailableComponentId = IdGenerator.Peek();
-	SaveSchemaDatabase();
-	RunSchemaCompiler();
+	if (bSaveSchemaDatabase)
+	{
+		UE_LOG(LogTemp, Display, TEXT("Save Schema Database..."));
+		SaveSchemaDatabase();
+		UE_LOG(LogTemp, Display, TEXT("Save Schema Database...Done"));
+		RunSchemaCompiler();
+	}
+
+	if (const FActorSchemaData* ActorSchema = ActorClassPathToSchema.Find(TEXT("/Game/Blueprints/Weapons/BP_AutomaticRifle.BP_AutomaticRifle_C")))
+	{
+		UE_LOG(LogTemp, Display, TEXT("ActorSchema: %s"), *ActorSchema->GeneratedSchemaName);
+	}
+	
+
+	/*if (const FSubobjectSchemaData* Data = SubobjectClassPathToSchema.find(TEXT("/Game/Characters/MetaData/MetaDataProvider.MetaDataProvider_C")))
+	{
+		UE_LOG(LogTemp, Display, TEXT("SubObject Data Component Id: %d"), )
+	}*/
 
 	return true;
 }

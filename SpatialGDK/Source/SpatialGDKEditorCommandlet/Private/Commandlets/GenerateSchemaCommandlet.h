@@ -3,11 +3,12 @@
 #pragma once
 
 #include "Commandlets/Commandlet.h"
+#include "Commandlets/CookCommandlet.h"
 
 #include "GenerateSchemaCommandlet.generated.h"
 
 UCLASS()
-class UGenerateSchemaCommandlet : public UCommandlet
+class UGenerateSchemaCommandlet : public UCookCommandlet
 {
 	GENERATED_BODY()
 

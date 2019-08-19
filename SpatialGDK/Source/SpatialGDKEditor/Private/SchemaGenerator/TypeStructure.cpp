@@ -313,7 +313,8 @@ TSharedPtr<FUnrealType> CreateUnrealTypeInfo(UStruct* Type, uint32 ParentChecksu
 				// This property is definitely a strong reference, recurse into it.
 				PropertyNode->Type = CreateUnrealTypeInfo(Value->GetClass(), ParentChecksum, 0, bIsRPC);
 				PropertyNode->Type->ParentProperty = PropertyNode;
-				PropertyNode->Type->ObjectPath = Value->GetPathName();
+				SetObjectPath(PropertyNode->Type, Value->GetPathName());
+				//PropertyNode->Type->ObjectPath = Value->GetPathName();
 				PropertyNode->Type->bObjectEditorOnly = Value->IsEditorOnly();
 				PropertyNode->Type->Name = Value->GetFName();
 
@@ -377,9 +378,16 @@ TSharedPtr<FUnrealType> CreateUnrealTypeInfo(UStruct* Type, uint32 ParentChecksu
 					{
 						PropertyNode->Type = CreateUnrealTypeInfo(ObjectProperty->PropertyClass, ParentChecksum, 0, bIsRPC);
 						PropertyNode->Type->ParentProperty = PropertyNode;
-						PropertyNode->Type->ObjectPath = Node->ComponentTemplate->GetPathName();
+						//PropertyNode->Type->ObjectPath = Node->ComponentTemplate->GetPathName();
+						SetObjectPath(PropertyNode->Type, Node->ComponentTemplate->GetPathName());
 						PropertyNode->Type->bObjectEditorOnly = Node->ComponentTemplate->IsEditorOnly();
 						PropertyNode->Type->Name = ObjectProperty->GetFName();
+
+						if (Node->ComponentTemplate->GetPathName().Contains("GEN_VARIABLE"))
+						{
+							/*UE_LOG(LogTemp, Warning, TEXT("--- FOUND GEN VARIABLE ---"));
+							LogUnrealProperty(PropertyNode, 1);*/
+						}
 					}
 				}
 			}
@@ -767,4 +775,161 @@ FString GetEnumDataType(const UEnumProperty* EnumProperty)
 	}
 
 	return DataType;
+}
+
+void LogUnrealType(const TSharedPtr<FUnrealType> Type, int RecurseDepth, FString Indent)
+{
+	UE_LOG(LogTemp, Display, TEXT("%s| ---- Type ----"), *Indent);
+	if (!Type.IsValid())
+	{
+		UE_LOG(LogTemp, Display, TEXT("%s| Invalid"), *Indent);
+		return;
+	}
+	UE_LOG(LogTemp, Display, TEXT("%s| Name: %s"), *Indent, *Type->Name.ToString());
+	UE_LOG(LogTemp, Display, TEXT("%s| ObjectPath: %s"), *Indent, *Type->ObjectPath);
+	UE_LOG(LogTemp, Display, TEXT("%s| ClassPath: %s"), *Indent, *Type->ClassPath);
+	UE_LOG(LogTemp, Display, TEXT("%s| ClassName: %s"), *Indent, *Type->ClassName);
+	UE_LOG(LogTemp, Display, TEXT("%s| NumRPCs: %d"), *Indent, Type->NumRPCs);
+	UE_LOG(LogTemp, Display, TEXT("%s| bIsActorClass: %d"), *Indent, Type->bIsActorClass);
+	UE_LOG(LogTemp, Display, TEXT("%s| bIsActorComponent: %d"), *Indent, Type->bIsActorComponent);
+	UE_LOG(LogTemp, Display, TEXT("%s| ParentProperty:"), *Indent);
+	if (RecurseDepth > 0)
+	{
+		LogUnrealProperty(Type->ParentProperty.Pin(), RecurseDepth - 1, Indent + "  ");
+	}
+	UE_LOG(LogTemp, Display, TEXT("%s| Properties: %d"), *Indent, Type->PropertiesList.Num());
+	if (RecurseDepth > 0)
+	{
+		for (auto& Property : Type->PropertiesList)
+		{
+			LogUnrealProperty(Property, RecurseDepth - 1, Indent + "  ");
+		}
+		
+	}
+}
+
+void LogUnrealProperty(const TSharedPtr<FUnrealProperty> Property, int RecurseDepth, FString Indent)
+ {
+	UE_LOG(LogTemp, Display, TEXT(""));
+	UE_LOG(LogTemp, Display, TEXT("%s|==================="), *Indent);
+	UE_LOG(LogTemp, Display, TEXT("%s| ---- Property ----"), *Indent);
+	if (!Property.IsValid())
+	{
+		UE_LOG(LogTemp, Display, TEXT("%s| Invalid"), *Indent);
+		return;
+	}
+	UE_LOG(LogTemp, Display, TEXT("%s| PropertyPath: %s"), *Indent, *Property->PropertyPath);
+	UE_LOG(LogTemp, Display, TEXT("%s| PropertyName: %s"), *Indent, *Property->PropertyName);
+	UE_LOG(LogTemp, Display, TEXT("%s| bObjectProperty: %d"), *Indent, Property->bObjectProperty);
+	UE_LOG(LogTemp, Display, TEXT("%s| bStructProperty: %d"), *Indent, Property->bStructProperty);
+	UE_LOG(LogTemp, Display, TEXT("%s| bArrayProperty: %d"), *Indent, Property->bArrayProperty);
+	UE_LOG(LogTemp, Display, TEXT("%s| bObjectArrayProperty: %d"), *Indent, Property->bObjectArrayProperty);
+	UE_LOG(LogTemp, Display, TEXT("%s| ArrayDim: %d"), *Indent, Property->ArrayDim);
+	UE_LOG(LogTemp, Display, TEXT("%s| PropertyFlags: %d"), *Indent, (int64)Property->PropertyFlags);
+	UE_LOG(LogTemp, Display, TEXT("%s| StructFlags: %d"), *Indent, (int64)Property->StructFlags);
+	UE_LOG(LogTemp, Display, TEXT("%s| DataType: %s"), *Indent, *Property->DataType);
+	UE_LOG(LogTemp, Display, TEXT("%s| StaticArrayIndex: %d"), *Indent, Property->StaticArrayIndex);
+	UE_LOG(LogTemp, Display, TEXT("%s| CompatibleChecksum: %u"), *Indent, Property->CompatibleChecksum);
+	UE_LOG(LogTemp, Display, TEXT("%s| ParentChecksum: %u"), *Indent, Property->ParentChecksum);
+	if (RecurseDepth > 0)
+	{
+		UE_LOG(LogTemp, Display, TEXT("%s| Type:"), *Indent);
+		LogUnrealType(Property->Type, RecurseDepth - 1, Indent + "  ");
+		UE_LOG(LogTemp, Display, TEXT("%s| ContainerType:"), *Indent);
+		LogUnrealType(Property->ContainerType.Pin(), RecurseDepth - 1, Indent + "  ");
+	}
+	else
+	{
+		UE_LOG(LogTemp, Display, TEXT("%s| Type / ContainerType: - Hit Recurse Depth"), *Indent);
+	}
+}
+
+void SetObjectPath(TSharedPtr<FUnrealType> UnrealType, FString ObjectPath)
+{
+	const FString GenVariablePostFix = TEXT("_GEN_VARIABLE");
+	UnrealType->ObjectPath = ObjectPath;
+	UnrealType->ObjectPath.ReplaceInline(*GenVariablePostFix, TEXT(""));
+}
+
+void VisitAllObjects(TSharedPtr<FUnrealType> TypeNode, TFunction<bool(TSharedPtr<FUnrealType>)> Visitor, bool bRecurseIntoSubobjects)
+{
+	bool bShouldRecurseFurther = Visitor(TypeNode);
+	for (auto& Property : TypeNode->PropertiesList)
+	{
+		if (bShouldRecurseFurther && Property->Type.IsValid())
+		{
+			// Either recurse into subobjects if they're structs or bRecurseIntoSubobjects is true.
+			if (bRecurseIntoSubobjects || Property->bStructProperty)
+			{
+				VisitAllObjects(Property->Type, Visitor, bRecurseIntoSubobjects);
+			}
+		}
+	}
+}
+
+uint32 GetTypeHash(const FUnrealType& A)
+{
+	uint32 Hash = 0;
+	Hash = HashCombine(Hash, GetTypeHash(A.ObjectPath));
+	Hash = HashCombine(Hash, GetTypeHash(A.bObjectEditorOnly));
+	Hash = HashCombine(Hash, GetTypeHash(A.Name));
+	for (const TSharedPtr<FUnrealProperty> Property : A.PropertiesList)
+	{
+		if (Property.IsValid())
+		{
+			Hash = HashCombine(Hash, GetTypeHash(Property.Get()));
+		}
+	}
+	Hash = HashCombine(Hash, GetTypeHash(A.NumRPCs));
+	if (A.ParentProperty.IsValid())
+	{
+		TSharedPtr<FUnrealProperty> ParentPropertyPtr = A.ParentProperty.Pin();
+		Hash = HashCombine(Hash, GetTypeHash(ParentPropertyPtr.Get()));
+	}
+	Hash = HashCombine(Hash, GetTypeHash(A.bIsActorComponent));
+	Hash = HashCombine(Hash, GetTypeHash(A.bIsActorComponent));
+	Hash = HashCombine(Hash, GetTypeHash(A.ClassPath));
+	Hash = HashCombine(Hash, GetTypeHash(A.ClassName));
+	return Hash;
+}
+
+uint32 GetTypeHash(const FUnrealProperty& A)
+{
+	uint32 Hash = 0;
+	if (A.Type.IsValid())
+	{
+		Hash = HashCombine(Hash, GetTypeHash(A.Type.Get()));
+	}
+	if (A.ReplicationData.IsValid())
+	{
+		Hash = HashCombine(Hash, GetTypeHash(A.ReplicationData.Get()));
+	}
+	if (A.HandoverData.IsValid())
+	{
+		Hash = HashCombine(Hash, GetTypeHash(A.HandoverData.Get()));
+	}
+	if (A.ContainerType.IsValid())
+	{
+		Hash = HashCombine(Hash, GetTypeHash(A.ContainerType.Pin().Get()));
+	}
+
+	Hash = HashCombine(Hash, GetTypeHash(A.StaticArrayIndex));
+	Hash = HashCombine(Hash, GetTypeHash(A.CompatibleChecksum));
+	Hash = HashCombine(Hash, GetTypeHash(A.ParentChecksum));
+
+	Hash = HashCombine(Hash, GetTypeHash(A.bObjectProperty));
+	Hash = HashCombine(Hash, GetTypeHash(A.bStructProperty));
+	Hash = HashCombine(Hash, GetTypeHash(A.bArrayProperty));
+	Hash = HashCombine(Hash, GetTypeHash(A.bObjectArrayProperty));
+
+	Hash = HashCombine(Hash, GetTypeHash(A.PropertyPath));
+	Hash = HashCombine(Hash, GetTypeHash(A.PropertyName));
+
+	Hash = HashCombine(Hash, GetTypeHash(A.ArrayDim));
+	Hash = HashCombine(Hash, GetTypeHash(A.PropertyFlags));
+	Hash = HashCombine(Hash, GetTypeHash(A.StructFlags));
+
+	Hash = HashCombine(Hash, GetTypeHash(A.DataType));
+
+	return Hash;
 }

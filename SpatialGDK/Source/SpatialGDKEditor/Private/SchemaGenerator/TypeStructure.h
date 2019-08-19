@@ -115,10 +115,11 @@ struct FUnrealType
 	FString ClassName;
 };
 
+uint32 GetTypeHash(const FUnrealType& A);
+
 // A node which represents a single property or parameter in an RPC.
 struct FUnrealProperty
 {
-	//UProperty* Property;
 	TSharedPtr<FUnrealType> Type; // Only set if strong reference to object/struct property.
 	TSharedPtr<FUnrealRepData> ReplicationData; // Only set if property is replicated.
 	TSharedPtr<FUnrealHandoverData> HandoverData; // Only set if property is marked for handover (and not replicated).
@@ -144,6 +145,8 @@ struct FUnrealProperty
 
 	FString DataType;
 };
+
+uint32 GetTypeHash(const FUnrealProperty& A);
 
 // A node which represents an RPC.
 struct FUnrealRPC
@@ -248,3 +251,11 @@ FString PropertyToSchemaType(UProperty* Property);
 
 // Return the string representation of the underlying data type of an enum property
 FString GetEnumDataType(const UEnumProperty* EnumProperty);
+
+void LogUnrealType(TSharedPtr<FUnrealType> UnrealType, int RecurseDepth = 0, FString Indent = TEXT(""));
+
+void LogUnrealProperty(TSharedPtr<FUnrealProperty> UnrealProperty, int RecurseDepth = 0, FString Indent = TEXT(""));
+
+void SetObjectPath(TSharedPtr<FUnrealType> UnrealType, FString ObjectPath);
+
+void VisitAllObjects(TSharedPtr<FUnrealType> TypeNode, TFunction<bool(TSharedPtr<FUnrealType>)> Visitor, bool bRecurseIntoSubobjects);
