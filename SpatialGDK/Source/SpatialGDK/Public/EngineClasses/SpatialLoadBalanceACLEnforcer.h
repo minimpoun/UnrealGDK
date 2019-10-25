@@ -29,7 +29,18 @@ public:
 private:
 
 	USpatialNetDriver* NetDriver;
-	TArray<Worker_EntityId> AclWriteAuthAssignmentRequests;
+
+	struct WriteAuthAssignmentRequest
+	{
+		WriteAuthAssignmentRequest(Worker_EntityId InputEntityId)
+			: EntityId(InputEntityId)
+			, ProcessAttempts(0)
+		{}
+		Worker_EntityId EntityId;
+		int16_t ProcessAttempts;
+	};
+
+	TArray<WriteAuthAssignmentRequest> AclWriteAuthAssignmentRequests;
 
 	void ProcessQueuedAclAssignmentRequests();
 	void SetAclWriteAuthority(const Worker_EntityId EntityId, const FString& WorkerId);

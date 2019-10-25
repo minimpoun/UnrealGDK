@@ -38,21 +38,28 @@ void USpatialLoadBalanceACLEnforcer::AuthorityChanged(const Worker_AuthorityChan
 
 void USpatialLoadBalanceACLEnforcer::QueueAclAssignmentRequest(const Worker_EntityId EntityId)
 {
-	if (!AclWriteAuthAssignmentRequests.Contains(EntityId))
+	if (!AclWriteAuthAssignmentRequests.ContainsByPredicate([EntityId](const WriteAuthAssignmentRequest& Request) { return Request.EntityId == EntityId;}))
 	{
 		UE_LOG(LogSpatialLoadBalanceACLEnforcer, Log, TEXT("(%s) Queueing ACL assignment request for %lld"), *NetDriver->Connection->GetWorkerId(), EntityId);
-		AclWriteAuthAssignmentRequests.Add(EntityId);
+		AclWriteAuthAssignmentRequests.Add(WriteAuthAssignmentRequest(EntityId));
 	}
 }
 
 void USpatialLoadBalanceACLEnforcer::ProcessQueuedAclAssignmentRequests()
 {
-	// TODO: add a mechanism to detect when these requests stay in the queue longer than expected
 	const int32 Size = AclWriteAuthAssignmentRequests.Num();
 	for (int i = Size - 1; i >= 0; i--)
 	{
-		Worker_EntityId EntityId = AclWriteAuthAssignmentRequests[i];
-		const AuthorityIntent* MyAuthorityIntentComponent = NetDriver->StaticComponentView->GetComponentData<SpatialGDK::AuthorityIntent>(EntityId);
+		WriteAuthAssignmentRequest Request = AclWriteAuthAssignmentRequests[i];
+		const AuthorityIntent* MyAuthorityIntentComponent = NetDriver->StaticComponentView->GetComponentData<SpatialGDK::AuthorityIntent>(Request.EntityId);
+
+		static const int16_t ConcerningNumAttmempts = 5;
+		if (Request.ProcessAttempts >= ConcerningNumAttmempts)
+		{
+			UE_LOG(LogSpatialLoadBalanceACLEnforcer, Log, TEXT("Failed to process WriteAuthAssignmentRequest with EntityID: %lld. Process attempts made: %d"), Request.EntityId, Request.ProcessAttempts);
+		}
+
+		Request.ProcessAttempts++;
 
 		// TODO - if some entities won't have the component we should detect that before queueing the request.
 		// Need to be certain it is invalid to get here before receiving the AuthIntentComponent for an entity, then we can check() on it.
@@ -63,7 +70,6 @@ void USpatialLoadBalanceACLEnforcer::ProcessQueuedAclAssignmentRequests()
 		}
 
 		const FString& VirtualWorkerId = MyAuthorityIntentComponent->VirtualWorkerId;
-
 		if (VirtualWorkerId.IsEmpty())
 		{
 			continue;
@@ -82,7 +88,7 @@ void USpatialLoadBalanceACLEnforcer::ProcessQueuedAclAssignmentRequests()
 			continue;
 		}
 
-		SetAclWriteAuthority(EntityId, OwningWorkerId);
+		SetAclWriteAuthority(Request.EntityId, OwningWorkerId);
 		AclWriteAuthAssignmentRequests.RemoveAt(i);
 	}
 }
