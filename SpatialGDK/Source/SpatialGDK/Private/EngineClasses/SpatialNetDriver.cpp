@@ -55,6 +55,7 @@ DEFINE_STAT(STAT_SpatialActorsChanged);
 USpatialNetDriver::USpatialNetDriver(const FObjectInitializer& ObjectInitializer)
 	: Super(ObjectInitializer)
 	, VirtualWorkerTranslator(nullptr)
+	, LoadBalanceACLEnforcer(nullptr)
 	, bAuthoritativeDestruction(true)
 	, bConnectAsClient(false)
 	, bPersistSpatialConnection(true)
@@ -317,6 +318,9 @@ void USpatialNetDriver::CreateAndInitializeCoreClasses()
 	{
 		VirtualWorkerTranslator = NewObject<USpatialVirtualWorkerTranslator>();
 		VirtualWorkerTranslator->Init(this);
+
+		LoadBalanceACLEnforcer = NewObject<USpatialLoadBalanceACLEnforcer>();
+		LoadBalanceACLEnforcer->Init(this);
 
 		// TODO: timgibson - get from config data for a map?
 		UGridBasedLoadBalancingStrategy* NewLoadBalancer = NewObject<UGridBasedLoadBalancingStrategy>();
@@ -1293,9 +1297,9 @@ void USpatialNetDriver::TickDispatch(float DeltaTime)
 			SpatialMetrics->TickMetrics();
 		}
 
-		if (VirtualWorkerTranslator != nullptr)
+		if (LoadBalanceACLEnforcer != nullptr)
 		{
-			VirtualWorkerTranslator->Tick();
+			LoadBalanceACLEnforcer->Tick();
 		}
 	}
 }

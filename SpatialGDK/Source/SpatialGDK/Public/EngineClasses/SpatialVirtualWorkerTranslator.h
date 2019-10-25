@@ -29,11 +29,6 @@ public:
 
 	void AuthorityChanged(const Worker_AuthorityChangeOp& AuthChangeOp);
 
-	void OnComponentUpdated(const Worker_ComponentUpdateOp& Op);
-	void OnComponentRemoved(const Worker_RemoveComponentOp& Op);
-
-	void Tick();
-
 	const TArray<ZoneId>& GetZones() const { return Zones; }
 	const TArray<VirtualWorkerId>& GetVirtualWorkers() const { return VirtualWorkers; }
 	// TODO - VWId/FString discrepancy
@@ -44,8 +39,6 @@ public:
 
 	mutable FOnWorkerAssignmentChanged OnWorkerAssignmentChanged;
 
-	void QueueAclAssignmentRequest(const Worker_EntityId EntityId);
-
 private:
 
 	UFUNCTION()
@@ -53,9 +46,6 @@ private:
 	void AssignWorker(const FString& WorkerId);
 	void UnassignWorker(const FString& WorkerId);
 
-	void ProcessQueuedAclAssignmentRequests();
-
-	void SetAclWriteAuthority(const Worker_EntityId EntityId, const FString& WorkerId);
 	void QueryForWorkerEntities();
 
 	void ConstructVirtualWorkerMappingFromQueryResponse(const Worker_EntityQueryResponseOp& Op);
@@ -70,8 +60,6 @@ private:
 	TQueue<VirtualWorkerId> UnassignedVirtualWorkers;
 
 	TArray<FString> VirtualWorkerAssignment;
-
-	TArray<Worker_EntityId> AclWriteAuthAssignmentRequests;
 
 	USpatialNetDriver* NetDriver;
 

@@ -42,20 +42,11 @@ void USpatialVirtualWorkerTranslator::Init(USpatialNetDriver* InNetDriver)
 	VirtualWorkers.Add("VW_D");
 }
 
-void USpatialVirtualWorkerTranslator::Tick()
-{
-	if (VirtualWorkerAssignment.Num() > 0)
-	{
-		ProcessQueuedAclAssignmentRequests();
-	}
-}
-
 void USpatialVirtualWorkerTranslator::AuthorityChanged(const Worker_AuthorityChangeOp& AuthOp)
 {
-	const bool bAuthoritative = AuthOp.authority == WORKER_AUTHORITY_AUTHORITATIVE;
-
 	if (AuthOp.component_id == SpatialConstants::VIRTUAL_WORKER_MANAGER_COMPONENT_ID)
-	{	
+	{
+		const bool bAuthoritative = AuthOp.authority == WORKER_AUTHORITY_AUTHORITATIVE;
 		UE_LOG(LogSpatialVirtualWorkerTranslator, Log, TEXT("(%s) Authority over the VirtualWorkerTranslator has changed. This worker %s authority."), *NetDriver->Connection->GetWorkerId(), bAuthoritative ? TEXT("now has") : TEXT("does not have"));
 
 		// Only the VirtualWorkerTranslator has this component, so we can use it to get our real EntityId
@@ -72,13 +63,6 @@ void USpatialVirtualWorkerTranslator::AuthorityChanged(const Worker_AuthorityCha
 
 			QueryForWorkerEntities();
 		}
-	}
-	else if (AuthOp.component_id == SpatialConstants::ENTITY_ACL_COMPONENT_ID &&
-		bAuthoritative)
-	{
-		// We have gained authority over the ACL component for some entity
-		// If we have authority, the responsibility here is to set the EntityACL write auth to match the worker requested via the virtual worker component
-		QueueAclAssignmentRequest(AuthOp.entity_id);
 	}
 }
 
@@ -111,119 +95,6 @@ void USpatialVirtualWorkerTranslator::UnassignWorker(const FString& WorkerId)
 			break;
 		}
 	}
-}
-
-void USpatialVirtualWorkerTranslator::OnComponentUpdated(const Worker_ComponentUpdateOp& Op)
-{
-	if (Op.update.component_id == SpatialConstants::AUTHORITY_INTENT_COMPONENT_ID)
-	{
-		check(NetDriver);
-		check(NetDriver->StaticComponentView);
-		if (NetDriver->StaticComponentView->GetAuthority(Op.entity_id, SpatialConstants::ENTITY_ACL_COMPONENT_ID) == WORKER_AUTHORITY_AUTHORITATIVE)
-		{
-			QueueAclAssignmentRequest(Op.entity_id);
-		}
-	}
-}
-
-void USpatialVirtualWorkerTranslator::OnComponentRemoved(const Worker_RemoveComponentOp& Op)
-{
-	if (Op.component_id == SpatialConstants::WORKER_COMPONENT_ID)
-	{
-		//OnWorkerComponentRemoved(Op.data);
-	}
-}
-
-void USpatialVirtualWorkerTranslator::QueueAclAssignmentRequest(const Worker_EntityId EntityId)
-{
-	if (!AclWriteAuthAssignmentRequests.Contains(EntityId))
-	{
-		UE_LOG(LogSpatialVirtualWorkerTranslator, Log, TEXT("(%s) Queueing ACL assignment request for %lld"), *NetDriver->Connection->GetWorkerId(), EntityId);
-		AclWriteAuthAssignmentRequests.Add(EntityId);
-	}
-}
-
-// TODO: should probably move this to SpatialSender
-void USpatialVirtualWorkerTranslator::SetAclWriteAuthority(const Worker_EntityId EntityId, const FString& WorkerId)
-{
-	if (!NetDriver->StaticComponentView->HasAuthority(EntityId, SpatialConstants::ENTITY_ACL_COMPONENT_ID))
-	{
-		UE_LOG(LogSpatialVirtualWorkerTranslator, Warning, TEXT("(%s) Failing to set Acl WriteAuth for entity %lld to workerid: %s because this worker doesn't have authority over the EntityACL component."), *NetDriver->Connection->GetWorkerId(), EntityId, *WorkerId);
-		return;
-	}
-
-	EntityAcl* EntityACL = NetDriver->StaticComponentView->GetComponentData<EntityAcl>(EntityId);
-	check(EntityACL);
-
-	const FString& WriteWorkerId = FString::Printf(TEXT("workerId:%s"), *WorkerId);
-
-	WorkerAttributeSet OwningWorkerAttribute = { WriteWorkerId };
-
-	TArray<Worker_ComponentId> ComponentIds;
-	EntityACL->ComponentWriteAcl.GetKeys(ComponentIds);
-
-	for (int i = 0; i < ComponentIds.Num(); ++i)
-	{
-		if (ComponentIds[i] == SpatialConstants::ENTITY_ACL_COMPONENT_ID ||
-			ComponentIds[i] == SpatialConstants::CLIENT_RPC_ENDPOINT_COMPONENT_ID)
-		{
-			continue;
-		}
-
-		WorkerRequirementSet* wrs = EntityACL->ComponentWriteAcl.Find(ComponentIds[i]);
-		check(wrs->Num() == 1);
-		wrs->Empty();
-		wrs->Add(OwningWorkerAttribute);
-	}
-
-	UE_LOG(LogSpatialVirtualWorkerTranslator, Log, TEXT("(%s) Setting Acl WriteAuth for entity %lld to workerid: %s"), *NetDriver->Connection->GetWorkerId(), EntityId, *WorkerId);
-
-	Worker_ComponentUpdate Update = EntityACL->CreateEntityAclUpdate();
-	NetDriver->Connection->SendComponentUpdate(EntityId, &Update);
-}
-
-void USpatialVirtualWorkerTranslator::ProcessQueuedAclAssignmentRequests()
-{
-	TArray<Worker_EntityId> CompletedRequests;
-	CompletedRequests.Reserve(AclWriteAuthAssignmentRequests.Num());
-
-	// TODO: add a mechanism to detect when these requests stay in the queue longer than expected
-	for (const Worker_EntityId& EntityId : AclWriteAuthAssignmentRequests)
-	{
-		AuthorityIntent* MyAuthorityIntentComponent = NetDriver->StaticComponentView->GetComponentData<SpatialGDK::AuthorityIntent>(EntityId);
-
-		// TODO - if some entities won't have the component we should detect that before queueing the request.
-		// Need to be certain it is invalid to get here before receiving the AuthIntentComponent for an entity, then we can check() on it.
-		if (MyAuthorityIntentComponent == nullptr)
-		{
-			//UE_LOG(LogSpatialVirtualWorkerTranslator, Warning, TEXT("Detected entity without AuthIntent component"));
-			continue;
-		}
-
-		const FString& VirtualWorkerId = MyAuthorityIntentComponent->VirtualWorkerId;
-
-		if (VirtualWorkerId.IsEmpty())
-		{
-			continue;
-		}
-
-		int32 VirtualWorkerIndex;
-		VirtualWorkers.Find(VirtualWorkerId, VirtualWorkerIndex);
-		check(VirtualWorkerIndex != -1);
-
-		const FString& OwningWorkerId = VirtualWorkerAssignment[VirtualWorkerIndex];
-		if (OwningWorkerId.IsEmpty())
-		{
-			// A virtual worker -> physical worker mapping may not be established yet.
-			// We'll retry on the next Tick().
-			continue;
-		}
-
-		SetAclWriteAuthority(EntityId, OwningWorkerId);
-		CompletedRequests.Add(EntityId);
-	}
-
-	AclWriteAuthAssignmentRequests.RemoveAll([&](const Worker_EntityId EntityId) { return CompletedRequests.Contains(EntityId); });
 }
 
 void USpatialVirtualWorkerTranslator::ApplyVirtualWorkerManagerData(const Worker_ComponentData& Data)

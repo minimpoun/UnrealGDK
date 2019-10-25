@@ -238,6 +238,9 @@ private:
 	UPROPERTY()
 	USpatialVirtualWorkerTranslator* VirtualWorkerTranslator;
 
+	UPROPERTY()
+	USpatialLoadBalanceACLEnforcer* LoadBalanceACLEnforcer;
+
 	FTimerManager* TimerManager;
 
 	// TODO: Figure out how to remove entries when Channel/Actor gets deleted - UNR:100

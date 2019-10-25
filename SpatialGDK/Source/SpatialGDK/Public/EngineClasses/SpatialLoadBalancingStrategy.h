@@ -51,9 +51,9 @@ public:
 	virtual bool ShouldChangeAuthority(const AActor& Actor) const override;
 	virtual FString GetAuthoritativeVirtualWorkerId(const AActor& Actor) const override;
 
-	UPROPERTY(BlueprintReadOnly, EditDefaultsOnly)
+	UPROPERTY(BlueprintReadOnly, EditDefaultsOnly, Category=asd)
 	int32 ColumnCount = 1;
-	UPROPERTY(BlueprintReadOnly, EditDefaultsOnly)
+	UPROPERTY(BlueprintReadOnly, EditDefaultsOnly, Category = asd)
 	int32 RowCount = 1;
 
 private:

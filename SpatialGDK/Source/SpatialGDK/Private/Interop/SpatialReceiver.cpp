@@ -44,6 +44,7 @@ void USpatialReceiver::Init(USpatialNetDriver* InNetDriver, FTimerManager* InTim
 	ClassInfoManager = InNetDriver->ClassInfoManager;
 	GlobalStateManager = InNetDriver->GlobalStateManager;
 	VirtualWorkerTranslator = InNetDriver->VirtualWorkerTranslator;
+	LoadBalanceACLEnforcer = InNetDriver->LoadBalanceACLEnforcer;
 	TimerManager = InTimerManager;
 
 	IncomingRPCs.BindProcessingFunction(FProcessRPCDelegate::CreateUObject(this, &USpatialReceiver::ApplyRPC));
@@ -289,9 +290,14 @@ void USpatialReceiver::HandleActorAuthority(const Worker_AuthorityChangeOp& Op)
 		return;
 	}
 
-	if (VirtualWorkerTranslator != nullptr)
+	if (VirtualWorkerTranslator)
 	{
 		VirtualWorkerTranslator->AuthorityChanged(Op);
+	}
+
+	if (LoadBalanceACLEnforcer)
+	{
+		LoadBalanceACLEnforcer->AuthorityChanged(Op);
 	}
 
 	AActor* Actor = Cast<AActor>(NetDriver->PackageMap->GetObjectFromEntityId(Op.entity_id));
@@ -1139,8 +1145,12 @@ void USpatialReceiver::OnComponentUpdate(const Worker_ComponentUpdateOp& Op)
 	case SpatialConstants::AUTHORITY_INTENT_COMPONENT_ID:
 		if (NetDriver->IsServer())
 		{
-			check(NetDriver->VirtualWorkerTranslator != nullptr);
-			NetDriver->VirtualWorkerTranslator->OnComponentUpdated(Op);
+			check(NetDriver->StaticComponentView);
+			check(LoadBalanceACLEnforcer);
+			if (NetDriver->StaticComponentView->GetAuthority(Op.entity_id, SpatialConstants::ENTITY_ACL_COMPONENT_ID) == WORKER_AUTHORITY_AUTHORITATIVE)
+			{
+				LoadBalanceACLEnforcer->QueueAclAssignmentRequest(Op.entity_id);
+			}
 		}
 		return;
 	case SpatialConstants::VIRTUAL_WORKER_MANAGER_COMPONENT_ID:

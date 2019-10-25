@@ -687,7 +687,7 @@ void USpatialSender::SendAuthorityUpdate(const AActor& Actor, const FString& New
 	if (NetDriver->StaticComponentView->GetAuthority(EntityId, SpatialConstants::ENTITY_ACL_COMPONENT_ID) == WORKER_AUTHORITY_AUTHORITATIVE)
 	{
 		// Also notify the translator directly on the worker that sends the component update, as the update will short circuit
-		NetDriver->VirtualWorkerTranslator->QueueAclAssignmentRequest(EntityId);
+		NetDriver->LoadBalanceACLEnforcer->QueueAclAssignmentRequest(EntityId);
 	}
 }
 

@@ -10,6 +10,7 @@
 #include "UObject/CoreOnline.h"
 
 #include "EngineClasses/SpatialVirtualWorkerTranslator.h"
+#include "EngineClasses/SpatialLoadBalanceACLEnforcer.h"
 #include "Interop/Connection/ConnectionConfig.h"
 #include "Interop/SpatialOutputDevice.h"
 #include "SpatialConstants.h"
@@ -126,6 +127,8 @@ public:
 	UGlobalStateManager* GlobalStateManager;
 	UPROPERTY()
 	USpatialVirtualWorkerTranslator* VirtualWorkerTranslator;
+	UPROPERTY()
+	USpatialLoadBalanceACLEnforcer* LoadBalanceACLEnforcer;
 	UPROPERTY()
 	const class USpatialLoadBalancingStrategy* LoadBalancer;
 	UPROPERTY()
