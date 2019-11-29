@@ -41,10 +41,16 @@ public:
 	void ExecuteInitialSingletonActorReplication();
 	void UpdateSingletonEntityId(const FString& ClassName, const Worker_EntityId SingletonEntityId);
 
-	DECLARE_DELEGATE_OneParam(QueryDelegate, const Worker_EntityQueryResponseOp&);
-	void QueryGSM(const QueryDelegate& Callback);
-	bool GetAcceptingPlayersAndSessionIdFromQueryResponse(const Worker_EntityQueryResponseOp& Op, bool& OutAcceptingPlayers, int32& OutSessionId);
-	void ApplyDeploymentMapDataFromQueryResponse(const Worker_EntityQueryResponseOp& Op);
+	DECLARE_MULTICAST_DELEGATE(OnAcceptingPlayersUpdatedDelegate);
+	DECLARE_MULTICAST_DELEGATE(OnDeploymentSessionIdUpdatedDelegate);
+	OnAcceptingPlayersUpdatedDelegate OnAcceptingPlayersUpdated;
+	OnDeploymentSessionIdUpdatedDelegate OnDeploymentSessionIdUpdated;
+
+private:
+	void UpdateAcceptingPlayers(bool bNewAcceptingPlayers);
+	void UpdateDeploymentSessionId(int32 NewDeploymentSessionId);
+
+public:
 
 	void SetAcceptingPlayers(bool bAcceptingPlayers);
 	void SetCanBeginPlay(const bool bInCanBeginPlay);

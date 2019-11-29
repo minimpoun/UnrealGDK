@@ -398,7 +398,10 @@ void USpatialNetDriver::CreateAndInitializeCoreClasses()
 	{
 		Connection->GlobalStateManager = NewObject<UGlobalStateManager>();
 	}
+
 	GlobalStateManager = Connection->GlobalStateManager;
+	AcceptingPlayersUpdateHandle = GlobalStateManager->OnAcceptingPlayersUpdated.AddUObject(this, &USpatialNetDriver::OnGSMUpdated);
+	SessionIDUpdateHandle = GlobalStateManager->OnDeploymentSessionIdUpdated.AddUObject(this, &USpatialNetDriver::OnGSMUpdated);
 
 	if (Connection->StaticComponentView == nullptr)
 	{
@@ -497,10 +500,12 @@ bool USpatialNetDriver::ClientCanSendPlayerSpawnRequests()
 	return GlobalStateManager->GetAcceptingPlayers() && SessionId == GlobalStateManager->GetSessionId();
 }
 
-void USpatialNetDriver::OnGSMQuerySuccess()
+void USpatialNetDriver::OnGSMUpdated()
 {
 	// If the deployment is now accepting players and we are waiting to spawn. Spawn.
-	if (bWaitingToSpawn && ClientCanSendPlayerSpawnRequests())
+	if (!IsServer() &&
+		bWaitingToSpawn &&
+		ClientCanSendPlayerSpawnRequests())
 	{
 		UWorld* CurrentWorld = GetWorld();
 		const FString& DeploymentMapURL = GlobalStateManager->GetDeploymentMapURL();
@@ -529,66 +534,12 @@ void USpatialNetDriver::OnGSMQuerySuccess()
 	}
 }
 
-void USpatialNetDriver::RetryQueryGSM()
-{
-	float RetryTimerDelay = SpatialConstants::ENTITY_QUERY_RETRY_WAIT_SECONDS;
-
-	// In PIE we want to retry the entity query as soon as possible.
-#if WITH_EDITOR
-	RetryTimerDelay = 0.1f;
-#endif
-
-	UE_LOG(LogSpatialOSNetDriver, Log, TEXT("Retrying query for GSM in %f seconds"), RetryTimerDelay);
-	FTimerHandle RetryTimer;
-	TimerManager.SetTimer(RetryTimer, [WeakThis = TWeakObjectPtr<USpatialNetDriver>(this)]()
-	{
-		if (WeakThis.IsValid())
-		{
-			if (UGlobalStateManager* GSM = WeakThis.Get()->GlobalStateManager)
-			{
-				UGlobalStateManager::QueryDelegate QueryDelegate;
-				QueryDelegate.BindUObject(WeakThis.Get(), &USpatialNetDriver::GSMQueryDelegateFunction);
-				GSM->QueryGSM(QueryDelegate);
-			}
-		}
-	}, RetryTimerDelay, false);
-}
-
-void USpatialNetDriver::GSMQueryDelegateFunction(const Worker_EntityQueryResponseOp& Op)
-{
-	bool bNewAcceptingPlayers = false;
-	int32 QuerySessionId = 0;
-	bool bQueryResponseSuccess = GlobalStateManager->GetAcceptingPlayersAndSessionIdFromQueryResponse(Op, bNewAcceptingPlayers, QuerySessionId);
-
-	if (!bQueryResponseSuccess)
-	{
-		UE_LOG(LogSpatialOSNetDriver, Error, TEXT("Failed to extract AcceptingPlayers and SessionId from GSM query response. Will retry query for GSM."));
-		RetryQueryGSM();
-		return;
-	}
-	else if (bNewAcceptingPlayers != true ||
-			 QuerySessionId != SessionId)
-	{
-		UE_LOG(LogSpatialOSNetDriver, Log, TEXT("GlobalStateManager did not match expected state. Will retry query for GSM."));
-		RetryQueryGSM();
-		return;
-	}
-
-	OnGSMQuerySuccess();
-}
-
 void USpatialNetDriver::QueryGSMToLoadMap()
 {
 	check(bConnectAsClient);
 
 	// Register our interest in spawning.
 	bWaitingToSpawn = true;
-
-	UGlobalStateManager::QueryDelegate QueryDelegate;
-	QueryDelegate.BindUObject(this, &USpatialNetDriver::GSMQueryDelegateFunction);
-
-	// Begin querying the state of the GSM so we know the state of AcceptingPlayers and SessionId.
-	GlobalStateManager->QueryGSM(QueryDelegate);
 }
 
 void USpatialNetDriver::OnMapLoaded(UWorld* LoadedWorld)
@@ -765,6 +716,18 @@ void USpatialNetDriver::SpatialProcessServerTravel(const FString& URL, bool bAbs
 void USpatialNetDriver::BeginDestroy()
 {
 	Super::BeginDestroy();
+
+	if (GlobalStateManager)
+	{
+		if (AcceptingPlayersUpdateHandle.IsValid())
+		{
+			GlobalStateManager->OnAcceptingPlayersUpdated.Remove(AcceptingPlayersUpdateHandle);
+		}
+		if (SessionIDUpdateHandle.IsValid())
+		{
+			GlobalStateManager->OnAcceptingPlayersUpdated.Remove(SessionIDUpdateHandle);
+		}
+	}
 
 	if (Connection != nullptr)
 	{
