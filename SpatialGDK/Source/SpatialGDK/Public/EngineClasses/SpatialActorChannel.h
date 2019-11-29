@@ -10,6 +10,7 @@
 #include "Interop/SpatialStaticComponentView.h"
 #include "Runtime/Launch/Resources/Version.h"
 #include "Schema/StandardLibrary.h"
+#include "Schema/RPCPayload.h"
 #include "SpatialCommonTypes.h"
 #include "Utils/RepDataUtils.h"
 
@@ -18,6 +19,106 @@
 #include "SpatialActorChannel.generated.h"
 
 DECLARE_LOG_CATEGORY_EXTERN(LogSpatialActorChannel, Log, All);
+
+struct FObjectReferences
+{
+	FObjectReferences() = default;
+	FObjectReferences(FObjectReferences&& Other)
+		: MappedRefs(MoveTemp(Other.MappedRefs))
+		, UnresolvedRefs(MoveTemp(Other.UnresolvedRefs))
+		, bSingleProp(Other.bSingleProp)
+		, bFastArrayProp(Other.bFastArrayProp)
+		, Buffer(MoveTemp(Other.Buffer))
+		, NumBufferBits(Other.NumBufferBits)
+		, Array(MoveTemp(Other.Array))
+		, ShadowOffset(Other.ShadowOffset)
+		, ParentIndex(Other.ParentIndex)
+		, Property(Other.Property) {}
+
+	// Single property constructor
+	FObjectReferences(const FUnrealObjectRef& InObjectRef, bool bUnresolved, int32 InCmdIndex, int32 InParentIndex, UProperty* InProperty)
+		: bSingleProp(true), bFastArrayProp(false), ShadowOffset(InCmdIndex), ParentIndex(InParentIndex), Property(InProperty)
+	{
+		if (bUnresolved)
+		{
+			UnresolvedRefs.Add(InObjectRef);
+		}
+		else
+		{
+			MappedRefs.Add(InObjectRef);
+		}
+	}
+
+	// Struct (memory stream) constructor
+	FObjectReferences(const TArray<uint8>& InBuffer, int32 InNumBufferBits, TSet<FUnrealObjectRef>&& InDynamicRefs, TSet<FUnrealObjectRef>&& InUnresolvedRefs, int32 InCmdIndex, int32 InParentIndex, UProperty* InProperty, bool InFastArrayProp = false)
+		: MappedRefs(MoveTemp(InDynamicRefs)), UnresolvedRefs(MoveTemp(InUnresolvedRefs)), bSingleProp(false), bFastArrayProp(InFastArrayProp), Buffer(InBuffer), NumBufferBits(InNumBufferBits), ShadowOffset(InCmdIndex), ParentIndex(InParentIndex), Property(InProperty) {}
+
+	// Array constructor
+	FObjectReferences(FObjectReferencesMap* InArray, int32 InCmdIndex, int32 InParentIndex, UProperty* InProperty)
+		: bSingleProp(false), bFastArrayProp(false), Array(InArray), ShadowOffset(InCmdIndex), ParentIndex(InParentIndex), Property(InProperty) {}
+
+	TSet<FUnrealObjectRef>				MappedRefs;
+	TSet<FUnrealObjectRef>				UnresolvedRefs;
+
+	bool								bSingleProp;
+	bool								bFastArrayProp;
+	TArray<uint8>						Buffer;
+	int32								NumBufferBits;
+
+	TUniquePtr<FObjectReferencesMap>	Array;
+	int32								ShadowOffset;
+	int32								ParentIndex;
+	UProperty*							Property;
+};
+
+struct FPendingIncomingRPC
+{
+	FPendingIncomingRPC(const TSet<FUnrealObjectRef>& InUnresolvedRefs, UObject* InTargetObject, UFunction* InFunction, const SpatialGDK::RPCPayload& InPayload)
+		: UnresolvedRefs(InUnresolvedRefs), TargetObject(InTargetObject), Function(InFunction), Payload(InPayload) {}
+
+	TSet<FUnrealObjectRef> UnresolvedRefs;
+	TWeakObjectPtr<UObject> TargetObject;
+	UFunction* Function;
+	SpatialGDK::RPCPayload Payload;
+	FString SenderWorkerId;
+};
+
+using FIncomingRPCArray = TArray<TSharedPtr<FPendingIncomingRPC>>;
+
+struct FPendingSubobjectAttachment
+{
+	USpatialActorChannel* Channel;
+	const FClassInfo* Info;
+	TWeakObjectPtr<UObject> Subobject;
+
+	TSet<Worker_ComponentId> PendingAuthorityDelegations;
+};
+
+class FSpatialObjectRepState;
+
+using FObjectToReplicatorMap = TMap < FUnrealObjectRef, TSet<FSpatialObjectRepState*> >;
+
+class FSpatialObjectRepState
+{
+public:
+
+	FSpatialObjectRepState(FChannelObjectPair InThisObj) : ThisObj(InThisObj) {}
+
+	void UpdateRefToRepStateMap(FObjectToReplicatorMap& ReplicatorMap, FIncomingRPCArray* PendingRPCs);
+	bool MoveMappedObjectToUnmapped(/*FRepLayout& RepLayout, */const FUnrealObjectRef& ObjRef, TMap<FUnrealObjectRef, TSet<FChannelObjectPair>>& UnresolvedRefMap);
+	bool HasUnresolved() const;
+
+
+	FObjectReferencesMap ReferenceMap;
+	TSet< FUnrealObjectRef > ReferencedObj;
+	FChannelObjectPair ThisObj;
+
+private:
+	bool MoveMappedObjectToUnmapped_r(/*FRepLayout& RepLayout, */const FUnrealObjectRef& ObjRef, FObjectReferencesMap& ObjectReferencesMap, TMap<FUnrealObjectRef, TSet<FChannelObjectPair>>& UnresolvedRefMap);
+	static bool HasUnresolved_r(const FObjectReferencesMap& ObjectReferencesMap);
+	void GatherObjectRef(TSet<FUnrealObjectRef>& OutSet, const FObjectReferences& References) const;
+};
+
 
 UCLASS(Transient)
 class SPATIALGDK_API USpatialActorChannel : public UActorChannel
@@ -186,6 +287,8 @@ public:
 	bool bCreatingNewEntity;
 
 	TSet<TWeakObjectPtr<UObject>> PendingDynamicSubobjects;
+
+	TMap<TWeakObjectPtr<UObject>, FSpatialObjectRepState> ObjectReferenceMap;
 
 private:
 	Worker_EntityId EntityId;

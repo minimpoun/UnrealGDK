@@ -39,57 +39,6 @@ struct PendingAddComponentWrapper
 	TUniquePtr<SpatialGDK::DynamicComponent> Data;
 };
 
-struct FObjectReferences
-{
-	FObjectReferences() = default;
-	FObjectReferences(FObjectReferences&& Other)
-		: UnresolvedRefs(MoveTemp(Other.UnresolvedRefs))
-		, bSingleProp(Other.bSingleProp)
-		, bFastArrayProp(Other.bFastArrayProp)
-		, Buffer(MoveTemp(Other.Buffer))
-		, NumBufferBits(Other.NumBufferBits)
-		, Array(MoveTemp(Other.Array))
-		, ShadowOffset(Other.ShadowOffset)
-		, ParentIndex(Other.ParentIndex)
-		, Property(Other.Property) {}
-
-	// Single property constructor
-	FObjectReferences(const FUnrealObjectRef& InUnresolvedRef, int32 InCmdIndex, int32 InParentIndex, UProperty* InProperty)
-		: bSingleProp(true), bFastArrayProp(false), ShadowOffset(InCmdIndex), ParentIndex(InParentIndex), Property(InProperty)
-	{
-		UnresolvedRefs.Add(InUnresolvedRef);
-	}
-
-	// Struct (memory stream) constructor
-	FObjectReferences(const TArray<uint8>& InBuffer, int32 InNumBufferBits, const TSet<FUnrealObjectRef>& InUnresolvedRefs, int32 InCmdIndex, int32 InParentIndex, UProperty* InProperty, bool InFastArrayProp = false)
-		: UnresolvedRefs(InUnresolvedRefs), bSingleProp(false), bFastArrayProp(InFastArrayProp), Buffer(InBuffer), NumBufferBits(InNumBufferBits), ShadowOffset(InCmdIndex), ParentIndex(InParentIndex), Property(InProperty) {}
-
-	// Array constructor
-	FObjectReferences(FObjectReferencesMap* InArray, int32 InCmdIndex, int32 InParentIndex, UProperty* InProperty)
-		: bSingleProp(false), bFastArrayProp(false), Array(InArray), ShadowOffset(InCmdIndex), ParentIndex(InParentIndex), Property(InProperty) {}
-
-	TSet<FUnrealObjectRef>				UnresolvedRefs;
-
-	bool								bSingleProp;
-	bool								bFastArrayProp;
-	TArray<uint8>						Buffer;
-	int32								NumBufferBits;
-
-	TUniquePtr<FObjectReferencesMap>	Array;
-	int32								ShadowOffset;
-	int32								ParentIndex;
-	UProperty*							Property;
-};
-
-struct FPendingSubobjectAttachment
-{
-	USpatialActorChannel* Channel;
-	const FClassInfo* Info;
-	TWeakObjectPtr<UObject> Subobject;
-
-	TSet<Worker_ComponentId> PendingAuthorityDelegations;
-};
-
 DECLARE_DELEGATE_OneParam(EntityQueryDelegate, const Worker_EntityQueryResponseOp&);
 DECLARE_DELEGATE_OneParam(ReserveEntityIDsDelegate, const Worker_ReserveEntityIdsResponseOp&);
 DECLARE_DELEGATE_OneParam(CreateEntityDelegate, const Worker_CreateEntityResponseOp&);
@@ -141,10 +90,19 @@ public:
 	void OnDisconnect(Worker_DisconnectOp& Op);
 
 	void RemoveActor(Worker_EntityId EntityId);
-	bool IsPendingOpsOnChannel(USpatialActorChannel* Channel);
+	bool IsPendingOpsOnChannel(USpatialActorChannel& Channel);
 
 	void ClearPendingRPCs(Worker_EntityId EntityId);
+
+	void CleanupRepStateMap(FSpatialObjectRepState& Replicator);
+	void CleanupIncomingRefMap(FSpatialObjectRepState& Replicator, FChannelObjectPair);
+	void MoveMappedObjectToUnmapped(FUnrealObjectRef&);
+
 private:
+
+	void CheckRepStateMapInvariants();
+	void CheckRepStateMapInvariants(FSpatialObjectRepState& Replicator, FChannelObjectPair Object);
+
 	void EnterCriticalSection();
 	void LeaveCriticalSection();
 
@@ -162,13 +120,13 @@ private:
 	void HandlePlayerLifecycleAuthority(const Worker_AuthorityChangeOp& Op, class APlayerController* PlayerController);
 	void HandleActorAuthority(const Worker_AuthorityChangeOp& Op);
 
-	void ApplyComponentDataOnActorCreation(Worker_EntityId EntityId, const Worker_ComponentData& Data, USpatialActorChannel* Channel, const FClassInfo& ActorClassInfo);
-	void ApplyComponentData(UObject* TargetObject, USpatialActorChannel* Channel, const Worker_ComponentData& Data);
+	void ApplyComponentDataOnActorCreation(Worker_EntityId EntityId, const Worker_ComponentData& Data, USpatialActorChannel& Channel, const FClassInfo& ActorClassInfo);
+	void ApplyComponentData(USpatialActorChannel& Channel, UObject& TargetObject, const Worker_ComponentData& Data);
 	// This is called for AddComponentOps not in a critical section, which means they are not a part of the initial entity creation.
 	void HandleIndividualAddComponent(const Worker_AddComponentOp& Op);
 	void AttachDynamicSubobject(AActor* Actor, Worker_EntityId EntityId, const FClassInfo& Info);
 
-	void ApplyComponentUpdate(const Worker_ComponentUpdate& ComponentUpdate, UObject* TargetObject, USpatialActorChannel* Channel, bool bIsHandover);
+	void ApplyComponentUpdate(const Worker_ComponentUpdate& ComponentUpdate, UObject& TargetObject, USpatialActorChannel& Channel, bool bIsHandover);
 
 	FRPCErrorInfo ApplyRPC(const FPendingRPCParams& Params);
 	ERPCResult ApplyRPCInternal(UObject* TargetObject, UFunction* Function, const SpatialGDK::RPCPayload& Payload, const FString& SenderWorkerId, bool bApplyWithUnresolvedRefs = false);
@@ -177,7 +135,8 @@ private:
 
 	bool IsReceivedEntityTornOff(Worker_EntityId EntityId);
 
-	void QueueIncomingRepUpdates(FChannelObjectPair ChannelObjectPair, const FObjectReferencesMap& ObjectReferencesMap, const TSet<FUnrealObjectRef>& UnresolvedRefs);
+	void UpdateSpatialObjectRepState(USpatialActorChannel& Channel, FObjectReferencesMap&& TempRefMap, UObject& ObjectPtr, const TSet<FUnrealObjectRef>& UnresolvedRefs);
+	void QueueIncomingRepUpdates(USpatialActorChannel& Channel, UObject& Object, const TSet<FUnrealObjectRef>& UnresolvedRefs);
 
 	void ProcessOrQueueIncomingRPC(const FUnrealObjectRef& InTargetObjectRef, SpatialGDK::RPCPayload&& InPayload);
 
@@ -227,11 +186,14 @@ private:
 	SpatialLoadBalanceEnforcer* LoadBalanceEnforcer;
 
 	FTimerManager* TimerManager;
-
-	// TODO: Figure out how to remove entries when Channel/Actor gets deleted - UNR:100
-	TMap<FChannelObjectPair, FObjectReferencesMap> UnresolvedRefsMap;
+	
 	TArray<TPair<UObject*, FUnrealObjectRef>> ResolvedObjectQueue;
+<<<<<<< HEAD
 
+=======
+	TMap<FUnrealObjectRef, TSet<FSpatialObjectRepState*>> ObjectRefToRepStateMap;
+	TMap<FUnrealObjectRef, FIncomingRPCArray> IncomingRPCMap;
+>>>>>>> Track mapped object refs
 	FRPCContainer IncomingRPCs;
 
 	bool bInCriticalSection;

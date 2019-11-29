@@ -83,6 +83,178 @@ void UpdateChangelistHistory(TUniquePtr<FRepState>& RepState)
 }
 } // end anonymous namespace
 
+bool FSpatialObjectRepState::HasUnresolved() const
+{
+	return HasUnresolved_r(ReferenceMap);
+}
+
+bool FSpatialObjectRepState::HasUnresolved_r(const FObjectReferencesMap& ObjectReferencesMap)
+{
+	for (const TPair<int32, FObjectReferences>& Refs : ObjectReferencesMap)
+	{
+		if (Refs.Value.UnresolvedRefs.Num() > 0)
+		{
+			return true;
+		}
+
+		if (Refs.Value.Array && HasUnresolved_r(*Refs.Value.Array))
+		{
+			return true;
+		}
+	}
+
+	return false;
+}
+
+bool FSpatialObjectRepState::MoveMappedObjectToUnmapped_r(/*FRepLayout& RepLayout, */ const FUnrealObjectRef& ObjRef, FObjectReferencesMap& ObjectReferencesMap, TMap<FUnrealObjectRef, TSet<FChannelObjectPair>>& UnresolvedRefMap)
+{
+	bool bFoundRef = false;
+
+	for (auto& ObjReferencePair : ObjectReferencesMap)
+	{
+		FObjectReferences& ObjReferences = ObjReferencePair.Value;
+
+		if (ObjReferences.Array != NULL)
+		{
+			//check(RepLayout.Cmds[ObjReferences.CmdIndex].Type == ERepLayoutCmdType::DynamicArray);
+
+			if (MoveMappedObjectToUnmapped_r(/*RepLayout,*/ ObjRef, *ObjReferences.Array, UnresolvedRefMap))
+			{
+				bFoundRef = true;
+			}
+			continue;
+		}
+
+		if (ObjReferences.MappedRefs.Contains(ObjRef))
+		{
+			ObjReferences.MappedRefs.Remove(ObjRef);
+			ObjReferences.UnresolvedRefs.Add(ObjRef);
+			UnresolvedRefMap.FindOrAdd(ObjRef).Add(ThisObj);
+			bFoundRef = true;
+		}
+	}
+
+	return bFoundRef;
+}
+
+
+bool FSpatialObjectRepState::MoveMappedObjectToUnmapped(/*FRepLayout& RepLayout, */const FUnrealObjectRef& ObjRef, TMap<FUnrealObjectRef, TSet<FChannelObjectPair>>& UnresolvedRefMap)
+{
+	//if (RepLayout.GetRepLayoutState() == ERepLayoutState::Uninitialized)
+	//{
+	//	UE_LOG(LogRep, Error, TEXT("FRepLayout::MoveMappedObjectToUnmapped: Uninitialized RepLayout: %s"), *GetPathNameSafe(RepLayout.GetOwner()));
+	//	return false;
+	//}
+
+	return MoveMappedObjectToUnmapped_r(/*RepLayout, */ObjRef, ReferenceMap, UnresolvedRefMap);
+}
+
+void FSpatialObjectRepState::GatherObjectRef(TSet<FUnrealObjectRef>& OutReferences, const FObjectReferences& CurReferences) const
+{
+	if (CurReferences.Array)
+	{
+		for (auto const& Entry : *CurReferences.Array)
+		{
+			GatherObjectRef(OutReferences, Entry.Value);
+		}
+	}
+
+	OutReferences.Append(CurReferences.UnresolvedRefs);
+	OutReferences.Append(CurReferences.MappedRefs);
+}
+
+void FSpatialObjectRepState::UpdateRefToRepStateMap(FObjectToReplicatorMap& RepStateMap, FIncomingRPCArray* PendingRPCs)
+{
+	//SCOPE_CYCLE_COUNTER(STAT_NetUpdateGuidToReplicatorMap);
+
+	//const bool bIsServer = Connection->Driver->IsServer();
+	//
+	//if (bIsServer)
+	//{
+	//	return;
+	//}
+
+	TSet< FUnrealObjectRef > LocalReferencedObj;
+	//int32 LocalTrackedGuidMemoryBytes = 0;
+	for (auto& Entry : ReferenceMap)
+	{
+		GatherObjectRef(LocalReferencedObj, Entry.Value);
+	}
+
+	//UObject* Object = GetObject();
+	//
+	//// Gather guids on fast tarray
+	//for (const int32 CustomIndex : LifetimeCustomDeltaProperties)
+	//{
+	//	FRepRecord* Rep = &ObjectClass->ClassReps[CustomIndex];
+	//
+	//	UStructProperty* StructProperty = CastChecked< UStructProperty >(Rep->Property);
+	//
+	//	FNetDeltaSerializeInfo Parms;
+	//
+	//	FNetSerializeCB NetSerializeCB(Connection->Driver);
+	//
+	//	Parms.NetSerializeCB = &NetSerializeCB;
+	//	Parms.GatherGuidReferences = &LocalReferencedGuids;
+	//	Parms.TrackedGuidMemoryBytes = &LocalTrackedGuidMemoryBytes;
+	//
+	//	UScriptStruct::ICppStructOps* CppStructOps = StructProperty->Struct->GetCppStructOps();
+	//
+	//	Parms.Struct = StructProperty->Struct;
+	//
+	//	if (Object != nullptr)
+	//	{
+	//		CppStructOps->NetDeltaSerialize(Parms, StructProperty->ContainerPtrToValuePtr<void>(Object, Rep->Index));
+	//	}
+	//}
+
+	// Gather RPC guids
+	if (PendingRPCs)
+	{
+		for (const TSharedPtr<FPendingIncomingRPC>& PendingRPC : *PendingRPCs)
+		{
+			for (const FUnrealObjectRef& Ref : PendingRPC->UnresolvedRefs)
+			{
+				LocalReferencedObj.Add(Ref);
+
+				//LocalTrackedGuidMemoryBytes += PendingRPC.UnmappedGuids.GetAllocatedSize();
+				//LocalTrackedGuidMemoryBytes += PendingRPC.Buffer.Num();
+			}
+		}
+	}
+
+	// Go over all referenced guids, and make sure we're tracking them in the GuidToReplicatorMap
+	for (const FUnrealObjectRef& Ref : LocalReferencedObj)
+	{
+		if (!ReferencedObj.Contains(Ref))
+		{
+			RepStateMap.FindOrAdd(Ref).Add(this);
+		}
+	}
+
+	// Remove any guids that we were previously tracking but no longer should
+	for (const FUnrealObjectRef& Ref : ReferencedObj)
+	{
+		if (!LocalReferencedObj.Contains(Ref))
+		{
+			TSet< FSpatialObjectRepState* >& RepStatesWithMappedRef = RepStateMap.FindChecked(Ref);
+
+			RepStatesWithMappedRef.Remove(this);
+
+			if (RepStatesWithMappedRef.Num() == 0)
+			{
+				RepStateMap.Remove(Ref);
+			}
+		}
+	}
+
+	//Connection->Driver->TotalTrackedGuidMemoryBytes -= TrackedGuidMemoryBytes;
+	//TrackedGuidMemoryBytes = LocalTrackedGuidMemoryBytes;
+	//Connection->Driver->TotalTrackedGuidMemoryBytes += TrackedGuidMemoryBytes;
+
+	ReferencedObj = MoveTemp(LocalReferencedObj);
+}
+
 USpatialActorChannel::USpatialActorChannel(const FObjectInitializer& ObjectInitializer /*= FObjectInitializer::Get()*/)
 	: Super(ObjectInitializer)
 	, bCreatedEntity(false)
@@ -185,9 +357,10 @@ bool USpatialActorChannel::CleanUp(const bool bForDestroy, EChannelCloseReason C
 			Receiver->ClearPendingRPCs(EntityId);
 			Sender->ClearPendingRPCs(EntityId);
 		}
-
-		NetDriver->RemoveActorChannel(EntityId);
+		
+		NetDriver->RemoveActorChannel(EntityId, *this);
 	}
+
 
 	return UActorChannel::CleanUp(bForDestroy, CloseReason);
 }
@@ -207,7 +380,7 @@ int64 USpatialActorChannel::Close(EChannelCloseReason Reason)
 		NetDriver->RegisterDormantEntityId(EntityId);
 	}
 
-	NetDriver->RemoveActorChannel(EntityId);
+	NetDriver->RemoveActorChannel(EntityId, *this);
 
 	return Super::Close(Reason);
 }
@@ -788,7 +961,7 @@ bool USpatialActorChannel::ReplicateSubobject(UObject* Obj, FOutBunch& Bunch, co
 bool USpatialActorChannel::ReadyForDormancy(bool bSuppressLogs /*= false*/)
 {
  	// Check Receiver doesn't have any pending operations for this channel
- 	if (Receiver->IsPendingOpsOnChannel(this))
+ 	if (Receiver->IsPendingOpsOnChannel(*this))
  	{
  		return false;
  	}
@@ -1134,6 +1307,12 @@ void USpatialActorChannel::RemoveRepNotifiesWithUnresolvedObjs(TArray<UProperty*
 		{
 			// ParentIndex will be -1 for handover properties.
 			if (ObjRef.Value.ParentIndex < 0)
+			{
+				continue;
+			}
+
+			// Only when there are unresolved refs.
+			if (ObjRef.Value.UnresolvedRefs.Num() == 0)
 			{
 				continue;
 			}
