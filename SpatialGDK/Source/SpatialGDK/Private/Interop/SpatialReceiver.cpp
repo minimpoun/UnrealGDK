@@ -1997,7 +1997,7 @@ void USpatialReceiver::ResolveIncomingOperations(UObject* Object, const FUnrealO
 		FRepLayout& RepLayout = DependentChannel->GetObjectRepLayout(ReplicatingObject);
 		FRepStateStaticBuffer& ShadowData = DependentChannel->GetObjectStaticBuffer(ReplicatingObject);
 
-		ResolveObjectReferences(RepLayout, ReplicatingObject, ObjectRepState->ReferenceMap, ShadowData.GetData(), (uint8*)ReplicatingObject, ReplicatingObject->GetClass()->GetPropertiesSize(), RepNotifies, bSomeObjectsWereMapped, bStillHasUnresolved);
+		ResolveObjectReferences(RepLayout, ReplicatingObject, *ObjectRepState, ObjectRepState->ReferenceMap, ShadowData.GetData(), (uint8*)ReplicatingObject, ReplicatingObject->GetClass()->GetPropertiesSize(), RepNotifies, bSomeObjectsWereMapped, bStillHasUnresolved);
 
 		if (bSomeObjectsWereMapped)
 		{
@@ -2015,7 +2015,7 @@ void USpatialReceiver::ResolveIncomingOperations(UObject* Object, const FUnrealO
 #endif
 }
 
-void USpatialReceiver::ResolveObjectReferences(FRepLayout& RepLayout, UObject* ReplicatedObject, FObjectReferencesMap& ObjectReferencesMap, uint8* RESTRICT StoredData, uint8* RESTRICT Data, int32 MaxAbsOffset, TArray<UProperty*>& RepNotifies, bool& bOutSomeObjectsWereMapped, bool& bOutStillHasUnresolved)
+void USpatialReceiver::ResolveObjectReferences(FRepLayout& RepLayout, UObject* ReplicatedObject, FSpatialObjectRepState& RepState, FObjectReferencesMap& ObjectReferencesMap, uint8* RESTRICT StoredData, uint8* RESTRICT Data, int32 MaxAbsOffset, TArray<UProperty*>& RepNotifies, bool& bOutSomeObjectsWereMapped, bool& bOutStillHasUnresolved)
 {
 	for (auto It = ObjectReferencesMap.CreateIterator(); It; ++It)
 	{
@@ -2053,12 +2053,8 @@ void USpatialReceiver::ResolveObjectReferences(FRepLayout& RepLayout, UObject* R
 			int32 NewMaxOffset = Array->Num() * Property->ElementSize;
 
 			bool bArrayHasUnresolved = false;
-			ResolveObjectReferences(RepLayout, ReplicatedObject, *ObjectReferences.Array, bIsHandover ? nullptr : (uint8*)StoredArray->GetData(), (uint8*)Array->GetData(), NewMaxOffset, RepNotifies, bOutSomeObjectsWereMapped, bArrayHasUnresolved);
-			if (!bArrayHasUnresolved)
-			{
-				It.RemoveCurrent();
-			}
-			else
+			ResolveObjectReferences(RepLayout, ReplicatedObject, RepState, *ObjectReferences.Array, bIsHandover ? nullptr : (uint8*)StoredArray->GetData(), (uint8*)Array->GetData(), NewMaxOffset, RepNotifies, bOutSomeObjectsWereMapped, bArrayHasUnresolved);
+			if (bArrayHasUnresolved)
 			{
 				bOutStillHasUnresolved = true;
 			}
@@ -2088,6 +2084,7 @@ void USpatialReceiver::ResolveObjectReferences(FRepLayout& RepLayout, UObject* R
 				}
 
 				UnresolvedIt.RemoveCurrent();
+				RepState.ResolveReference();
 
 				bResolvedSomeRefs = true;
 			}
@@ -2286,14 +2283,26 @@ void USpatialReceiver::CheckRepStateMapInvariants(FSpatialObjectRepState& RepSta
 	}
 }
 
+namespace
+{
+	FString GetObjectNameFromRepState(const FSpatialObjectRepState& RepState)
+	{
+		if (UObject* Obj = RepState.GetChannelObjectPair().Value.Get())
+		{
+			return Obj->GetName();
+		}
+		return TEXT("<unknown>");
+	}
+}
+
 void USpatialReceiver::CleanupRepStateMap(FSpatialObjectRepState& RepState)
 {
 	for (const FUnrealObjectRef& Ref : RepState.ReferencedObj)
 	{
 		TSet<FSpatialObjectRepState*>* RepStatesWithMappedRef = ObjectRefToRepStateMap.Find(Ref);
-		if (ensure(RepStatesWithMappedRef))
+		if (ensureMsgf(RepStatesWithMappedRef, TEXT("Ref to entity %i on object %s is missing its referenced entry in the Ref/RepState map"), Ref.Entity, *GetObjectNameFromRepState(RepState)))
 		{
-			check(RepStatesWithMappedRef->Contains(&RepState));
+			checkf(RepStatesWithMappedRef->Contains(&RepState), TEXT("Ref to entity %i on object %s is missing its referenced entry in the Ref/RepState map"), Ref.Entity, *GetObjectNameFromRepState(RepState));
 			RepStatesWithMappedRef->Remove(&RepState);
 			if (RepStatesWithMappedRef->Num() == 0)
 			{
@@ -2303,19 +2312,28 @@ void USpatialReceiver::CleanupRepStateMap(FSpatialObjectRepState& RepState)
 	}
 }
 
-void USpatialReceiver::CleanupIncomingRefMap(FSpatialObjectRepState& Replicator, FChannelObjectPair Object)
+void USpatialReceiver::CleanupIncomingRefMap(FSpatialObjectRepState& RepState, FChannelObjectPair Object)
 {
-	for (auto& Entry : Replicator.ReferenceMap)
+	if (RepState.HasUnresolved())
 	{
-		FObjectReferences& ObjReferences = Entry.Value;
-		for (auto& UnresolvedRef : ObjReferences.UnresolvedRefs)
+		TSet<FUnrealObjectRef> UnresolvedReferences;
+		for (auto& Entry : RepState.ReferenceMap)
+		{
+			FObjectReferences& ObjReferences = Entry.Value;
+			for (auto& UnresolvedRef : ObjReferences.UnresolvedRefs)
+			{
+				UnresolvedReferences.Add(UnresolvedRef);
+			}
+		}
+
+		for (auto& UnresolvedRef : UnresolvedReferences)
 		{
 			TSet<FChannelObjectPair>* ObjectSet = IncomingRefsMap.Find(UnresolvedRef);
 			// There should always be a bijection between the two map.
-			
-			if (ensure(ObjectSet != nullptr))
+
+			if (ensureMsgf(ObjectSet != nullptr, TEXT("Object %s is missing its unresolved reference to %i in the IncomingRefMap"), *GetObjectNameFromRepState(RepState), UnresolvedRef.Entity))
 			{
-				check(ObjectSet->Contains(Object))
+				checkf(ObjectSet->Contains(Object), TEXT("Object %s is missing its unresolved reference to %i in the IncomingRefMap"), *GetObjectNameFromRepState(RepState), UnresolvedRef.Entity);
 				ObjectSet->Remove(Object);
 				if (ObjectSet->Num() == 0)
 				{
@@ -2323,5 +2341,7 @@ void USpatialReceiver::CleanupIncomingRefMap(FSpatialObjectRepState& Replicator,
 				}
 			}
 		}
+		
 	}
+	
 }

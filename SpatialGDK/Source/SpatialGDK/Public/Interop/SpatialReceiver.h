@@ -142,7 +142,7 @@ private:
 	void ResolvePendingOperations_Internal(UObject* Object, const FUnrealObjectRef& ObjectRef);
 	void ResolveIncomingOperations(UObject* Object, const FUnrealObjectRef& ObjectRef);
 
-	void ResolveObjectReferences(FRepLayout& RepLayout, UObject* ReplicatedObject, FObjectReferencesMap& ObjectReferencesMap, uint8* RESTRICT StoredData, uint8* RESTRICT Data, int32 MaxAbsOffset, TArray<UProperty*>& RepNotifies, bool& bOutSomeObjectsWereMapped, bool& bOutStillHasUnresolved);
+	void ResolveObjectReferences(FRepLayout& RepLayout, UObject* ReplicatedObject, FSpatialObjectRepState& RepState, FObjectReferencesMap& ObjectReferencesMap, uint8* RESTRICT StoredData, uint8* RESTRICT Data, int32 MaxAbsOffset, TArray<UProperty*>& RepNotifies, bool& bOutSomeObjectsWereMapped, bool& bOutStillHasUnresolved);
 
 	void ProcessQueuedResolvedObjects();
 	void ProcessQueuedActorRPCsOnEntityCreation(AActor* Actor, SpatialGDK::RPCsOnEntityCreation& QueuedRPCs);

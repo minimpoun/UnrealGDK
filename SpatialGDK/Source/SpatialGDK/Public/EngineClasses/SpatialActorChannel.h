@@ -108,17 +108,21 @@ public:
 
 	void UpdateRefToRepStateMap(FObjectToRepStateMap& ReplicatorMap, FIncomingRPCArray* PendingRPCs);
 	bool MoveMappedObjectToUnmapped(const FUnrealObjectRef& ObjRef, TMap<FUnrealObjectRef, TSet<FChannelObjectPair>>& UnresolvedRefMap);
-	bool HasUnresolved() const;
+	bool HasUnresolved() const { return NumUnresolved != 0; }
+
+	void ResolveReference();
+
+	const FChannelObjectPair& GetChannelObjectPair() const { return ThisObj; }
 
 	FObjectReferencesMap ReferenceMap;
 	TSet< FUnrealObjectRef > ReferencedObj;
 
 private:
 	bool MoveMappedObjectToUnmapped_r(const FUnrealObjectRef& ObjRef, FObjectReferencesMap& ObjectReferencesMap, TMap<FUnrealObjectRef, TSet<FChannelObjectPair>>& UnresolvedRefMap);
-	static bool HasUnresolved_r(const FObjectReferencesMap& ObjectReferencesMap);
-	void GatherObjectRef(TSet<FUnrealObjectRef>& OutSet, const FObjectReferences& References) const;
+	void GatherObjectRef(TSet<FUnrealObjectRef>& OutSet, const FObjectReferences& References, int32& OutNumUnresolved) const;
 
 	FChannelObjectPair ThisObj;
+	int32 NumUnresolved = 0;
 };
 
 
