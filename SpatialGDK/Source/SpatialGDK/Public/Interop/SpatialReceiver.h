@@ -135,7 +135,6 @@ private:
 
 	bool IsReceivedEntityTornOff(Worker_EntityId EntityId);
 
-	void UpdateSpatialObjectRepState(USpatialActorChannel& Channel, FObjectReferencesMap&& TempRefMap, UObject& ObjectPtr, const TSet<FUnrealObjectRef>& UnresolvedRefs);
 	void QueueIncomingRepUpdates(USpatialActorChannel& Channel, UObject& Object, const TSet<FUnrealObjectRef>& UnresolvedRefs);
 
 	void ProcessOrQueueIncomingRPC(const FUnrealObjectRef& InTargetObjectRef, SpatialGDK::RPCPayload&& InPayload);
@@ -186,14 +185,15 @@ private:
 	SpatialLoadBalanceEnforcer* LoadBalanceEnforcer;
 
 	FTimerManager* TimerManager;
+
 	
 	TArray<TPair<UObject*, FUnrealObjectRef>> ResolvedObjectQueue;
-<<<<<<< HEAD
 
-=======
+	struct RepStateUpdateHelper;
 	TMap<FUnrealObjectRef, TSet<FSpatialObjectRepState*>> ObjectRefToRepStateMap;
-	TMap<FUnrealObjectRef, FIncomingRPCArray> IncomingRPCMap;
->>>>>>> Track mapped object refs
+
+	TArray<TPair<UObject*, FUnrealObjectRef>> ResolvedObjectQueue;
+	
 	FRPCContainer IncomingRPCs;
 
 	bool bInCriticalSection;

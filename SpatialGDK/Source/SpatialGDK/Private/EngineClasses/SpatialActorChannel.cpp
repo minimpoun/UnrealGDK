@@ -106,7 +106,7 @@ bool FSpatialObjectRepState::HasUnresolved_r(const FObjectReferencesMap& ObjectR
 	return false;
 }
 
-bool FSpatialObjectRepState::MoveMappedObjectToUnmapped_r(/*FRepLayout& RepLayout, */ const FUnrealObjectRef& ObjRef, FObjectReferencesMap& ObjectReferencesMap, TMap<FUnrealObjectRef, TSet<FChannelObjectPair>>& UnresolvedRefMap)
+bool FSpatialObjectRepState::MoveMappedObjectToUnmapped_r(const FUnrealObjectRef& ObjRef, FObjectReferencesMap& ObjectReferencesMap, TMap<FUnrealObjectRef, TSet<FChannelObjectPair>>& UnresolvedRefMap)
 {
 	bool bFoundRef = false;
 
@@ -116,9 +116,7 @@ bool FSpatialObjectRepState::MoveMappedObjectToUnmapped_r(/*FRepLayout& RepLayou
 
 		if (ObjReferences.Array != NULL)
 		{
-			//check(RepLayout.Cmds[ObjReferences.CmdIndex].Type == ERepLayoutCmdType::DynamicArray);
-
-			if (MoveMappedObjectToUnmapped_r(/*RepLayout,*/ ObjRef, *ObjReferences.Array, UnresolvedRefMap))
+			if (MoveMappedObjectToUnmapped_r(ObjRef, *ObjReferences.Array, UnresolvedRefMap))
 			{
 				bFoundRef = true;
 			}
@@ -138,15 +136,9 @@ bool FSpatialObjectRepState::MoveMappedObjectToUnmapped_r(/*FRepLayout& RepLayou
 }
 
 
-bool FSpatialObjectRepState::MoveMappedObjectToUnmapped(/*FRepLayout& RepLayout, */const FUnrealObjectRef& ObjRef, TMap<FUnrealObjectRef, TSet<FChannelObjectPair>>& UnresolvedRefMap)
+bool FSpatialObjectRepState::MoveMappedObjectToUnmapped(const FUnrealObjectRef& ObjRef, TMap<FUnrealObjectRef, TSet<FChannelObjectPair>>& UnresolvedRefMap)
 {
-	//if (RepLayout.GetRepLayoutState() == ERepLayoutState::Uninitialized)
-	//{
-	//	UE_LOG(LogRep, Error, TEXT("FRepLayout::MoveMappedObjectToUnmapped: Uninitialized RepLayout: %s"), *GetPathNameSafe(RepLayout.GetOwner()));
-	//	return false;
-	//}
-
-	return MoveMappedObjectToUnmapped_r(/*RepLayout, */ObjRef, ReferenceMap, UnresolvedRefMap);
+	return MoveMappedObjectToUnmapped_r(ObjRef, ReferenceMap, UnresolvedRefMap);
 }
 
 void FSpatialObjectRepState::GatherObjectRef(TSet<FUnrealObjectRef>& OutReferences, const FObjectReferences& CurReferences) const
@@ -163,24 +155,17 @@ void FSpatialObjectRepState::GatherObjectRef(TSet<FUnrealObjectRef>& OutReferenc
 	OutReferences.Append(CurReferences.MappedRefs);
 }
 
-void FSpatialObjectRepState::UpdateRefToRepStateMap(FObjectToReplicatorMap& RepStateMap, FIncomingRPCArray* PendingRPCs)
+void FSpatialObjectRepState::UpdateRefToRepStateMap(FObjectToRepStateMap& RepStateMap, FIncomingRPCArray* PendingRPCs)
 {
-	//SCOPE_CYCLE_COUNTER(STAT_NetUpdateGuidToReplicatorMap);
-
-	//const bool bIsServer = Connection->Driver->IsServer();
-	//
-	//if (bIsServer)
-	//{
-	//	return;
-	//}
+	// Inspired by FObjectReplicator::UpdateGuidToReplicatorMap
 
 	TSet< FUnrealObjectRef > LocalReferencedObj;
-	//int32 LocalTrackedGuidMemoryBytes = 0;
 	for (auto& Entry : ReferenceMap)
 	{
 		GatherObjectRef(LocalReferencedObj, Entry.Value);
 	}
 
+	// TODO : Support references in structures updated by deltas.
 	//UObject* Object = GetObject();
 	//
 	//// Gather guids on fast tarray
@@ -216,9 +201,6 @@ void FSpatialObjectRepState::UpdateRefToRepStateMap(FObjectToReplicatorMap& RepS
 			for (const FUnrealObjectRef& Ref : PendingRPC->UnresolvedRefs)
 			{
 				LocalReferencedObj.Add(Ref);
-
-				//LocalTrackedGuidMemoryBytes += PendingRPC.UnmappedGuids.GetAllocatedSize();
-				//LocalTrackedGuidMemoryBytes += PendingRPC.Buffer.Num();
 			}
 		}
 	}
@@ -247,10 +229,6 @@ void FSpatialObjectRepState::UpdateRefToRepStateMap(FObjectToReplicatorMap& RepS
 			}
 		}
 	}
-
-	//Connection->Driver->TotalTrackedGuidMemoryBytes -= TrackedGuidMemoryBytes;
-	//TrackedGuidMemoryBytes = LocalTrackedGuidMemoryBytes;
-	//Connection->Driver->TotalTrackedGuidMemoryBytes += TrackedGuidMemoryBytes;
 
 	ReferencedObj = MoveTemp(LocalReferencedObj);
 }

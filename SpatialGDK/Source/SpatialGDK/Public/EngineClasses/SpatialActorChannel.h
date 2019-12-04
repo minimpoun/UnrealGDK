@@ -96,27 +96,29 @@ struct FPendingSubobjectAttachment
 
 class FSpatialObjectRepState;
 
-using FObjectToReplicatorMap = TMap < FUnrealObjectRef, TSet<FSpatialObjectRepState*> >;
+using FObjectToRepStateMap = TMap < FUnrealObjectRef, TSet<FSpatialObjectRepState*> >;
 
+// Utility class to manage mapped and unresolved references.
+// Reproduces what is happening with FRepState::GuidReferencesMap, but with FUnrealObjectRef instead of FNetworkGUID
 class FSpatialObjectRepState
 {
 public:
 
 	FSpatialObjectRepState(FChannelObjectPair InThisObj) : ThisObj(InThisObj) {}
 
-	void UpdateRefToRepStateMap(FObjectToReplicatorMap& ReplicatorMap, FIncomingRPCArray* PendingRPCs);
-	bool MoveMappedObjectToUnmapped(/*FRepLayout& RepLayout, */const FUnrealObjectRef& ObjRef, TMap<FUnrealObjectRef, TSet<FChannelObjectPair>>& UnresolvedRefMap);
+	void UpdateRefToRepStateMap(FObjectToRepStateMap& ReplicatorMap, FIncomingRPCArray* PendingRPCs);
+	bool MoveMappedObjectToUnmapped(const FUnrealObjectRef& ObjRef, TMap<FUnrealObjectRef, TSet<FChannelObjectPair>>& UnresolvedRefMap);
 	bool HasUnresolved() const;
-
 
 	FObjectReferencesMap ReferenceMap;
 	TSet< FUnrealObjectRef > ReferencedObj;
-	FChannelObjectPair ThisObj;
 
 private:
-	bool MoveMappedObjectToUnmapped_r(/*FRepLayout& RepLayout, */const FUnrealObjectRef& ObjRef, FObjectReferencesMap& ObjectReferencesMap, TMap<FUnrealObjectRef, TSet<FChannelObjectPair>>& UnresolvedRefMap);
+	bool MoveMappedObjectToUnmapped_r(const FUnrealObjectRef& ObjRef, FObjectReferencesMap& ObjectReferencesMap, TMap<FUnrealObjectRef, TSet<FChannelObjectPair>>& UnresolvedRefMap);
 	static bool HasUnresolved_r(const FObjectReferencesMap& ObjectReferencesMap);
 	void GatherObjectRef(TSet<FUnrealObjectRef>& OutSet, const FObjectReferences& References) const;
+
+	FChannelObjectPair ThisObj;
 };
 
 
