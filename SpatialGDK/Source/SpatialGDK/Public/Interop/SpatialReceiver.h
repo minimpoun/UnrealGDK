@@ -99,9 +99,6 @@ public:
 
 private:
 
-	void CheckRepStateMapInvariants();
-	void CheckRepStateMapInvariants(FSpatialObjectRepState& Replicator, FChannelObjectPair Object);
-
 	void EnterCriticalSection();
 	void LeaveCriticalSection();
 

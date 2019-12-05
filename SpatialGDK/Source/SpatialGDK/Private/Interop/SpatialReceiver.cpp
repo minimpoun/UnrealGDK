@@ -1132,9 +1132,6 @@ struct USpatialReceiver::RepStateUpdateHelper
 					Channel.ObjectReferenceMap.Remove(ObjectPtr);
 				}
 			}
-#if DO_CHECK
-			Receiver.CheckRepStateMapInvariants();
-#endif
 		}
 #if DO_CHECK
 		bUpdatePerfomed = true;
@@ -1988,10 +1985,6 @@ void USpatialReceiver::ResolveIncomingOperations(UObject* Object, const FUnrealO
 
 		RepState->UnresolvedRefs.Remove(ObjectRef);
 	}
-
-#if DO_CHECK
-	CheckRepStateMapInvariants();
-#endif
 }
 
 void USpatialReceiver::ResolveObjectReferences(FRepLayout& RepLayout, UObject* ReplicatedObject, FSpatialObjectRepState& RepState, FObjectReferencesMap& ObjectReferencesMap, uint8* RESTRICT StoredData, uint8* RESTRICT Data, int32 MaxAbsOffset, TArray<UProperty*>& RepNotifies, bool& bOutSomeObjectsWereMapped, bool& bOutStillHasUnresolved)
@@ -2201,42 +2194,6 @@ void USpatialReceiver::MoveMappedObjectToUnmapped(FUnrealObjectRef& Ref)
 			RepState->MoveMappedObjectToUnmapped(Ref);
 		}
 	}
-
-#if DO_CHECK
-	CheckRepStateMapInvariants();
-#endif
-}
-
-void USpatialReceiver::CheckRepStateMapInvariants()
-{
-	auto& allChannels = NetDriver->GetEntityToActorChannelMap();
-	unsigned int i = 0;
-	for (auto& Pair : allChannels)
-	{
-		UE_LOG(LogSpatialReceiver, Display, TEXT("Checking channel %i"), i);
-		++i;
-		auto& channel = Pair.Value;
-		if (channel->Actor)
-		{
-			auto actorEntry = channel->ObjectReferenceMap.Find(channel->Actor);
-			if (actorEntry)
-			{
-				CheckRepStateMapInvariants(*actorEntry, FChannelObjectPair(channel, channel->Actor));
-			}
-		}
-
-		for(auto subObject : channel->CreateSubObjects)
-		{
-			if (subObject)
-			{
-				auto objEntry = channel->ObjectReferenceMap.Find(subObject);
-				if (objEntry)
-				{
-					CheckRepStateMapInvariants(*objEntry, FChannelObjectPair(channel, subObject));
-				}
-			}
-		}
-	}
 }
 
 namespace
@@ -2248,16 +2205,6 @@ namespace
 			return Obj->GetName();
 		}
 		return TEXT("<unknown>");
-	}
-}
-
-void USpatialReceiver::CheckRepStateMapInvariants(FSpatialObjectRepState& RepState, FChannelObjectPair Object)
-{
-	for (const FUnrealObjectRef& Ref : RepState.ReferencedObj)
-	{
-		TSet<FSpatialObjectRepState*>* RepStatesWithMappedRef = ObjectRefToRepStateMap.Find(Ref);
-		checkf(RepStatesWithMappedRef, TEXT("Ref to entity %i on object %s is missing its referenced entry in the Ref/RepState map"), Ref.Entity, *GetObjectNameFromRepState(RepState));
-		checkf(RepStatesWithMappedRef->Contains(&RepState), TEXT("Ref to entity %i on object %s is missing its referenced entry in the Ref/RepState map"), Ref.Entity, *GetObjectNameFromRepState(RepState));
 	}
 }
 
