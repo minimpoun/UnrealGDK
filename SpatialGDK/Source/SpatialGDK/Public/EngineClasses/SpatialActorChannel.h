@@ -107,22 +107,20 @@ public:
 	FSpatialObjectRepState(FChannelObjectPair InThisObj) : ThisObj(InThisObj) {}
 
 	void UpdateRefToRepStateMap(FObjectToRepStateMap& ReplicatorMap, FIncomingRPCArray* PendingRPCs);
-	bool MoveMappedObjectToUnmapped(const FUnrealObjectRef& ObjRef, TMap<FUnrealObjectRef, TSet<FChannelObjectPair>>& UnresolvedRefMap);
-	bool HasUnresolved() const { return NumUnresolved != 0; }
-
-	void ResolveReference();
+	bool MoveMappedObjectToUnmapped(const FUnrealObjectRef& ObjRef);
+	bool HasUnresolved() const { return UnresolvedRefs.Num() == 0; }
 
 	const FChannelObjectPair& GetChannelObjectPair() const { return ThisObj; }
 
 	FObjectReferencesMap ReferenceMap;
 	TSet< FUnrealObjectRef > ReferencedObj;
+	TSet< FUnrealObjectRef > UnresolvedRefs;
 
 private:
-	bool MoveMappedObjectToUnmapped_r(const FUnrealObjectRef& ObjRef, FObjectReferencesMap& ObjectReferencesMap, TMap<FUnrealObjectRef, TSet<FChannelObjectPair>>& UnresolvedRefMap);
-	void GatherObjectRef(TSet<FUnrealObjectRef>& OutSet, const FObjectReferences& References, int32& OutNumUnresolved) const;
+	bool MoveMappedObjectToUnmapped_r(const FUnrealObjectRef& ObjRef, FObjectReferencesMap& ObjectReferencesMap);
+	void GatherObjectRef(TSet<FUnrealObjectRef>& OutReferenced, TSet<FUnrealObjectRef>& OutUnresolved, const FObjectReferences& References) const;
 
 	FChannelObjectPair ThisObj;
-	int32 NumUnresolved = 0;
 };
 
 

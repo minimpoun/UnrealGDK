@@ -83,7 +83,7 @@ void UpdateChangelistHistory(TUniquePtr<FRepState>& RepState)
 }
 } // end anonymous namespace
 
-bool FSpatialObjectRepState::MoveMappedObjectToUnmapped_r(const FUnrealObjectRef& ObjRef, FObjectReferencesMap& ObjectReferencesMap, TMap<FUnrealObjectRef, TSet<FChannelObjectPair>>& UnresolvedRefMap)
+bool FSpatialObjectRepState::MoveMappedObjectToUnmapped_r(const FUnrealObjectRef& ObjRef, FObjectReferencesMap& ObjectReferencesMap)
 {
 	bool bFoundRef = false;
 
@@ -93,7 +93,7 @@ bool FSpatialObjectRepState::MoveMappedObjectToUnmapped_r(const FUnrealObjectRef
 
 		if (ObjReferences.Array != NULL)
 		{
-			if (MoveMappedObjectToUnmapped_r(ObjRef, *ObjReferences.Array, UnresolvedRefMap))
+			if (MoveMappedObjectToUnmapped_r(ObjRef, *ObjReferences.Array))
 			{
 				bFoundRef = true;
 			}
@@ -104,8 +104,6 @@ bool FSpatialObjectRepState::MoveMappedObjectToUnmapped_r(const FUnrealObjectRef
 		{
 			ObjReferences.MappedRefs.Remove(ObjRef);
 			ObjReferences.UnresolvedRefs.Add(ObjRef);
-			UnresolvedRefMap.FindOrAdd(ObjRef).Add(ThisObj);
-			++NumUnresolved;
 			bFoundRef = true;
 		}
 	}
@@ -113,41 +111,40 @@ bool FSpatialObjectRepState::MoveMappedObjectToUnmapped_r(const FUnrealObjectRef
 	return bFoundRef;
 }
 
-bool FSpatialObjectRepState::MoveMappedObjectToUnmapped(const FUnrealObjectRef& ObjRef, TMap<FUnrealObjectRef, TSet<FChannelObjectPair>>& UnresolvedRefMap)
+bool FSpatialObjectRepState::MoveMappedObjectToUnmapped(const FUnrealObjectRef& ObjRef)
 {
-	return MoveMappedObjectToUnmapped_r(ObjRef, ReferenceMap, UnresolvedRefMap);
+	if (MoveMappedObjectToUnmapped_r(ObjRef, ReferenceMap))
+	{
+		UnresolvedRefs.Add(ObjRef);
+		return true;
+	}
+	return false;
 }
 
-void FSpatialObjectRepState::GatherObjectRef(TSet<FUnrealObjectRef>& OutReferences, const FObjectReferences& CurReferences, int32& OutNumUnresolved) const
+void FSpatialObjectRepState::GatherObjectRef(TSet<FUnrealObjectRef>& OutReferenced, TSet<FUnrealObjectRef>& OutUnresolved, const FObjectReferences& CurReferences) const
 {
 	if (CurReferences.Array)
 	{
 		for (auto const& Entry : *CurReferences.Array)
 		{
-			GatherObjectRef(OutReferences, Entry.Value, OutNumUnresolved);
+			GatherObjectRef(OutReferenced, OutUnresolved, Entry.Value);
 		}
 	}
 
-	OutReferences.Append(CurReferences.UnresolvedRefs);
-	OutReferences.Append(CurReferences.MappedRefs);
-	OutNumUnresolved += CurReferences.UnresolvedRefs.Num();
-}
-
-void FSpatialObjectRepState::ResolveReference()
-{
-	check(NumUnresolved > 0);
-	NumUnresolved--;
+	OutUnresolved.Append(CurReferences.UnresolvedRefs);
+	OutReferenced.Append(CurReferences.UnresolvedRefs);
+	OutReferenced.Append(CurReferences.MappedRefs);
 }
 
 void FSpatialObjectRepState::UpdateRefToRepStateMap(FObjectToRepStateMap& RepStateMap, FIncomingRPCArray* PendingRPCs)
 {
 	// Inspired by FObjectReplicator::UpdateGuidToReplicatorMap
+	UnresolvedRefs.Empty();
 
-	NumUnresolved = 0;
 	TSet< FUnrealObjectRef > LocalReferencedObj;
 	for (auto& Entry : ReferenceMap)
 	{
-		GatherObjectRef(LocalReferencedObj, Entry.Value, NumUnresolved);
+		GatherObjectRef(LocalReferencedObj, UnresolvedRefs, Entry.Value);
 	}
 
 	// TODO : Support references in structures updated by deltas.

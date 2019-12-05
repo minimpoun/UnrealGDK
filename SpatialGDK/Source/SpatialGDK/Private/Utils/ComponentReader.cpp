@@ -78,12 +78,12 @@ namespace
 namespace SpatialGDK
 {
 
-ComponentReader::ComponentReader(USpatialNetDriver* InNetDriver, FObjectReferencesMap& InObjectReferencesMap, TSet<FUnrealObjectRef>& InUnresolvedRefs)
+ComponentReader::ComponentReader(USpatialNetDriver* InNetDriver, FObjectReferencesMap& InObjectReferencesMap/*, TSet<FUnrealObjectRef>& InUnresolvedRefs*/)
 	: PackageMap(InNetDriver->PackageMap)
 	, NetDriver(InNetDriver)
 	, ClassInfoManager(InNetDriver->ClassInfoManager)
 	, RootObjectReferencesMap(InObjectReferencesMap)
-	, UnresolvedRefs(InUnresolvedRefs)
+	//, UnresolvedRefs(InUnresolvedRefs)
 {
 }
 
@@ -219,7 +219,7 @@ void ComponentReader::ApplySchemaObject(Schema_Object* ComponentObject, UObject&
 						if (bHasReferences)
 						{
 							RootObjectReferencesMap.Add(SwappedCmd.Offset, FObjectReferences(ValueData, CountBits, MoveTemp(NewMappedRefs), MoveTemp(NewUnresolvedRefs), ShadowOffset, Cmd.ParentIndex, ArrayProperty, /* bFastArrayProp */ true));
-							UnresolvedRefs.Append(NewUnresolvedRefs);
+							//UnresolvedRefs.Append(NewUnresolvedRefs);
 						}
 						else
 						{
@@ -339,7 +339,7 @@ void ComponentReader::ApplyProperty(Schema_Object* Object, Schema_FieldId FieldI
 			if (bHasReferences)
 			{
 				InObjectReferencesMap.Add(Offset, FObjectReferences(ValueData, CountBits, MoveTemp(NewDynamicRefs), MoveTemp(NewUnresolvedRefs), ShadowOffset, ParentIndex, Property));
-				UnresolvedRefs.Append(NewUnresolvedRefs);
+				//UnresolvedRefs.Append(NewUnresolvedRefs);
 			}
 			else
 			{
@@ -408,10 +408,10 @@ void ComponentReader::ApplyProperty(Schema_Object* Object, Schema_FieldId FieldI
 			if (bHasReferences)
 			{
 				InObjectReferencesMap.Add(Offset, FObjectReferences(ObjectRef, bUnresolved, ShadowOffset, ParentIndex, Property));
-				if (bUnresolved)
-				{
-					UnresolvedRefs.Add(ObjectRef);
-				}
+				//if (bUnresolved)
+				//{
+				//	UnresolvedRefs.Add(ObjectRef);
+				//}
 			}
 			else
 			{

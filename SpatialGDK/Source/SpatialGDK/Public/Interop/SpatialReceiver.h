@@ -95,7 +95,7 @@ public:
 	void ClearPendingRPCs(Worker_EntityId EntityId);
 
 	void CleanupRepStateMap(FSpatialObjectRepState& Replicator);
-	void CleanupIncomingRefMap(FSpatialObjectRepState& Replicator, FChannelObjectPair);
+	//void CleanupIncomingRefMap(FSpatialObjectRepState& Replicator, FChannelObjectPair);
 	void MoveMappedObjectToUnmapped(FUnrealObjectRef&);
 
 private:
@@ -156,7 +156,7 @@ private:
 	void PeriodicallyProcessIncomingRPCs();
 
 public:
-	TMap<FUnrealObjectRef, TSet<FChannelObjectPair>> IncomingRefsMap;
+	//TMap<FUnrealObjectRef, TSet<FChannelObjectPair>> IncomingRefsMap;
 
 	TMap<TPair<Worker_EntityId_Key, Worker_ComponentId>, TSharedRef<FPendingSubobjectAttachment>> PendingEntitySubobjectDelegations;
 
