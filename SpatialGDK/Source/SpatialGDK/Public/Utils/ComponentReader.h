@@ -13,7 +13,7 @@ namespace SpatialGDK
 class ComponentReader
 {
 public:
-	ComponentReader(class USpatialNetDriver* InNetDriver, FObjectReferencesMap& InObjectReferencesMap/*, TSet<FUnrealObjectRef>& InUnresolvedRefs*/);
+	ComponentReader(class USpatialNetDriver* InNetDriver, FObjectReferencesMap& InObjectReferencesMap);
 
 	void ApplyComponentData(const Worker_ComponentData& ComponentData, UObject& Object, USpatialActorChannel& Channel, bool bIsHandover, bool& bOutReferencesChanged);
 	void ApplyComponentUpdate(const Worker_ComponentUpdate& ComponentUpdate, UObject& Object, USpatialActorChannel& Channel, bool bIsHandover, bool& bOutReferencesChanged);
@@ -32,7 +32,6 @@ private:
 	class USpatialNetDriver* NetDriver;
 	class USpatialClassInfoManager* ClassInfoManager;
 	FObjectReferencesMap& RootObjectReferencesMap;
-	//TSet<FUnrealObjectRef>& UnresolvedRefs;
 };
 
 } // namespace SpatialGDK
