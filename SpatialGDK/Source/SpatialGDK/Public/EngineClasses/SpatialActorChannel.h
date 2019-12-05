@@ -71,20 +71,6 @@ struct FObjectReferences
 	UProperty*							Property;
 };
 
-struct FPendingIncomingRPC
-{
-	FPendingIncomingRPC(const TSet<FUnrealObjectRef>& InUnresolvedRefs, UObject* InTargetObject, UFunction* InFunction, const SpatialGDK::RPCPayload& InPayload)
-		: UnresolvedRefs(InUnresolvedRefs), TargetObject(InTargetObject), Function(InFunction), Payload(InPayload) {}
-
-	TSet<FUnrealObjectRef> UnresolvedRefs;
-	TWeakObjectPtr<UObject> TargetObject;
-	UFunction* Function;
-	SpatialGDK::RPCPayload Payload;
-	FString SenderWorkerId;
-};
-
-using FIncomingRPCArray = TArray<TSharedPtr<FPendingIncomingRPC>>;
-
 struct FPendingSubobjectAttachment
 {
 	USpatialActorChannel* Channel;
@@ -106,7 +92,7 @@ public:
 
 	FSpatialObjectRepState(FChannelObjectPair InThisObj) : ThisObj(InThisObj) {}
 
-	void UpdateRefToRepStateMap(FObjectToRepStateMap& ReplicatorMap, FIncomingRPCArray* PendingRPCs);
+	void UpdateRefToRepStateMap(FObjectToRepStateMap& ReplicatorMap);
 	bool MoveMappedObjectToUnmapped(const FUnrealObjectRef& ObjRef);
 	bool HasUnresolved() const { return UnresolvedRefs.Num() == 0; }
 

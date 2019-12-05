@@ -136,7 +136,7 @@ void FSpatialObjectRepState::GatherObjectRef(TSet<FUnrealObjectRef>& OutReferenc
 	OutReferenced.Append(CurReferences.MappedRefs);
 }
 
-void FSpatialObjectRepState::UpdateRefToRepStateMap(FObjectToRepStateMap& RepStateMap, FIncomingRPCArray* PendingRPCs)
+void FSpatialObjectRepState::UpdateRefToRepStateMap(FObjectToRepStateMap& RepStateMap)
 {
 	// Inspired by FObjectReplicator::UpdateGuidToReplicatorMap
 	UnresolvedRefs.Empty();
@@ -174,18 +174,6 @@ void FSpatialObjectRepState::UpdateRefToRepStateMap(FObjectToRepStateMap& RepSta
 	//		CppStructOps->NetDeltaSerialize(Parms, StructProperty->ContainerPtrToValuePtr<void>(Object, Rep->Index));
 	//	}
 	//}
-
-	// Gather RPC guids
-	if (PendingRPCs)
-	{
-		for (const TSharedPtr<FPendingIncomingRPC>& PendingRPC : *PendingRPCs)
-		{
-			for (const FUnrealObjectRef& Ref : PendingRPC->UnresolvedRefs)
-			{
-				LocalReferencedObj.Add(Ref);
-			}
-		}
-	}
 
 	// Go over all referenced guids, and make sure we're tracking them in the GuidToReplicatorMap
 	for (const FUnrealObjectRef& Ref : LocalReferencedObj)

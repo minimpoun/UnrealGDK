@@ -179,9 +179,6 @@ private:
 
 	FTimerManager* TimerManager;
 
-	
-	TArray<TPair<UObject*, FUnrealObjectRef>> ResolvedObjectQueue;
-
 	struct RepStateUpdateHelper;
 	TMap<FUnrealObjectRef, TSet<FSpatialObjectRepState*>> ObjectRefToRepStateMap;
 

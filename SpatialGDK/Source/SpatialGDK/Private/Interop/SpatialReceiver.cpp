@@ -1125,7 +1125,7 @@ struct USpatialReceiver::RepStateUpdateHelper
 
 			if (ObjectRepState)
 			{
-				ObjectRepState->UpdateRefToRepStateMap(Receiver.ObjectRefToRepStateMap, nullptr);
+				ObjectRepState->UpdateRefToRepStateMap(Receiver.ObjectRefToRepStateMap);
 
 				if (ObjectRepState->ReferencedObj.Num() == 0)
 				{
