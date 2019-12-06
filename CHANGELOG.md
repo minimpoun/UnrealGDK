@@ -11,7 +11,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - The server no longer crashes, when received RPCs are processed recursively.
 - DeploymentLauncher can parse a .pb.json launch configuration.
 - DeploymentLauncher can launch a Simulated Player deployment independently from the target deployment.
-- Track properties containing references to replicated actors, in order to resolve them again in the actor they references moves out and back in relevance.
+- Track properties containing references to replicated actors, in order to resolve them again if the actor they reference moves out and back into relevance.
 Usage: `DeploymentLauncher createsim <project-name> <assembly-name> <target-deployment-name> <sim-deployment-name> <sim-deployment-json> <sim-deployment-region> <num-sim-players> <auto-connect>`
 
 ### Features:
