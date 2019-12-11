@@ -2023,7 +2023,6 @@ void USpatialNetDriver::RemoveActorChannel(Worker_EntityId EntityId, USpatialAct
 	for (auto& ChannelRefs : Channel.ObjectReferenceMap)
 	{
 		Receiver->CleanupRepStateMap(ChannelRefs.Value);
-		//Receiver->CleanupIncomingRefMap(ChannelRefs.Value, FChannelObjectPair(&Channel, ChannelRefs.Key));
 	}
 
 	if (!EntityToActorChannel.Contains(EntityId))

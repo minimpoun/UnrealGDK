@@ -95,7 +95,7 @@ public:
 	void ClearPendingRPCs(Worker_EntityId EntityId);
 
 	void CleanupRepStateMap(FSpatialObjectRepState& Replicator);
-	void MoveMappedObjectToUnmapped(FUnrealObjectRef&);
+	void MoveMappedObjectToUnmapped(const FUnrealObjectRef&);
 
 private:
 
@@ -136,7 +136,7 @@ private:
 	void ResolvePendingOperations_Internal(UObject* Object, const FUnrealObjectRef& ObjectRef);
 	void ResolveIncomingOperations(UObject* Object, const FUnrealObjectRef& ObjectRef);
 
-	void ResolveObjectReferences(FRepLayout& RepLayout, UObject* ReplicatedObject, FSpatialObjectRepState& RepState, FObjectReferencesMap& ObjectReferencesMap, uint8* RESTRICT StoredData, uint8* RESTRICT Data, int32 MaxAbsOffset, TArray<UProperty*>& RepNotifies, bool& bOutSomeObjectsWereMapped, bool& bOutStillHasUnresolved);
+	void ResolveObjectReferences(FRepLayout& RepLayout, UObject* ReplicatedObject, FSpatialObjectRepState& RepState, FObjectReferencesMap& ObjectReferencesMap, uint8* RESTRICT StoredData, uint8* RESTRICT Data, int32 MaxAbsOffset, TArray<UProperty*>& RepNotifies, bool& bOutSomeObjectsWereMapped);
 
 	void ProcessQueuedResolvedObjects();
 	void ProcessQueuedActorRPCsOnEntityCreation(AActor* Actor, SpatialGDK::RPCsOnEntityCreation& QueuedRPCs);
@@ -179,7 +179,11 @@ private:
 
 	FTimerManager* TimerManager;
 
+	// Helper struct to manage FSpatialObjectRepState update cycle.
 	struct RepStateUpdateHelper;
+
+	// Map from references to replicated objects to properties using these references.
+	// Useful to manage entities going in and out of interest, in order to recover references to actors.
 	TMap<FUnrealObjectRef, TSet<FSpatialObjectRepState*>> ObjectRefToRepStateMap;
 
 	TArray<TPair<UObject*, FUnrealObjectRef>> ResolvedObjectQueue;

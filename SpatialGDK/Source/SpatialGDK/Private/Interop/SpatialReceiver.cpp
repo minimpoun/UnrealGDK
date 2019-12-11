@@ -248,15 +248,16 @@ void USpatialReceiver::ProcessRemoveComponent(const Worker_RemoveComponentOp& Op
 
 	if (AActor* Actor = Cast<AActor>(PackageMap->GetObjectFromEntityId(Op.entity_id).Get()))
 	{
+		FUnrealObjectRef ObjectRef(Op.entity_id, Op.component_id);
 		if (Op.component_id == SpatialConstants::DORMANT_COMPONENT_ID)
 		{
 			RecreateDormantSpatialChannel(Actor, Op.entity_id);
 		}
-		else if (UObject* Object = PackageMap->GetObjectFromUnrealObjectRef(FUnrealObjectRef(Op.entity_id, Op.component_id)).Get())
+		else if (UObject* Object = PackageMap->GetObjectFromUnrealObjectRef(ObjectRef).Get())
 		{
 			if (USpatialActorChannel* Channel = NetDriver->GetActorChannelByEntityId(Op.entity_id))
 			{
-				Channel->CreateSubObjects.Remove(Object);
+				Channel->OnSubobjectDeleted(ObjectRef, Object);
 
 				Actor->OnSubobjectDestroyFromReplication(Object);
 
@@ -745,9 +746,9 @@ void USpatialReceiver::RemoveActor(Worker_EntityId EntityId)
 	
 	if (USpatialActorChannel* ActorChannel = NetDriver->GetActorChannelByEntityId(EntityId))
 	{
-		for (int32 i = 0; i < ActorChannel->CreateSubObjects.Num(); i++)
+		for (UObject*SubObject : ActorChannel->CreateSubObjects)
 		{
-			if (UObject *SubObject = ActorChannel->CreateSubObjects[i])
+			if (SubObject)
 			{
 				FUnrealObjectRef ObjectRef = FUnrealObjectRef::FromObjectPtr(SubObject, Cast<USpatialPackageMapClient>(PackageMap));
 				// Unmap this object so we can remap it if it becomes relevant again in the future
@@ -1560,9 +1561,6 @@ void USpatialReceiver::ReceiveCommandResponse(const Worker_CommandResponseOp& Op
 
 void USpatialReceiver::ApplyComponentUpdate(const Worker_ComponentUpdate& ComponentUpdate, UObject& TargetObject, USpatialActorChannel& Channel, bool bIsHandover)
 {
-	//FChannelObjectPair ChannelObjectPair(Channel, TargetObject);
-	TWeakObjectPtr<UObject> ObjectPtr = MakeWeakObjectPtr(&TargetObject);
-
 	RepStateUpdateHelper RepStateHelper(Channel, TargetObject);
 
 	ComponentReader Reader(NetDriver, RepStateHelper.GetRefMap());
@@ -1593,9 +1591,9 @@ ERPCResult USpatialReceiver::ApplyRPCInternal(UObject* TargetObject, UFunction* 
 	FMemory::Memzero(Parms, Function->ParmsSize);
 
 	TSet<FUnrealObjectRef> UnresolvedRefs;
-
+	TSet<FUnrealObjectRef> MappedRefs;
 	RPCPayload PayloadCopy = Payload;
-	FSpatialNetBitReader PayloadReader(PackageMap, PayloadCopy.PayloadData.GetData(), PayloadCopy.CountDataBits(), nullptr, UnresolvedRefs);
+	FSpatialNetBitReader PayloadReader(PackageMap, PayloadCopy.PayloadData.GetData(), PayloadCopy.CountDataBits(), MappedRefs, UnresolvedRefs);
 
 	TSharedPtr<FRepLayout> RepLayout = NetDriver->GetFunctionRepLayout(Function);
 	RepLayout_ReceivePropertiesForRPC(*RepLayout, PayloadReader, Parms);
@@ -1925,8 +1923,9 @@ void USpatialReceiver::ResolveIncomingOperations(UObject* Object, const FUnrealO
 
 	UE_LOG(LogSpatialReceiver, Verbose, TEXT("Resolving incoming operations depending on object ref %s, resolved object: %s"), *ObjectRef.ToString(), *Object->GetName());
 
-	for (FSpatialObjectRepState* RepState : *TargetObjectSet)
+	for (auto RepStateIter = TargetObjectSet->CreateIterator(); RepStateIter; ++RepStateIter)
 	{
+		FSpatialObjectRepState* RepState = *RepStateIter;
 		if (!RepState->UnresolvedRefs.Contains(ObjectRef))
 		{
 			continue;
@@ -1940,6 +1939,7 @@ void USpatialReceiver::ResolveIncomingOperations(UObject* Object, const FUnrealO
 			if (DependentChannel->ObjectReferenceMap.Find(ChannelObjectPair.Value))
 			{
 				DependentChannel->ObjectReferenceMap.Remove(ChannelObjectPair.Value);
+				RepStateIter.RemoveCurrent();
 			}
 			continue;
 		}
@@ -1966,14 +1966,13 @@ void USpatialReceiver::ResolveIncomingOperations(UObject* Object, const FUnrealO
 			}
 		}
 
-		bool bStillHasUnresolved = false;
 		bool bSomeObjectsWereMapped = false;
 		TArray<UProperty*> RepNotifies;
 
 		FRepLayout& RepLayout = DependentChannel->GetObjectRepLayout(ReplicatingObject);
 		FRepStateStaticBuffer& ShadowData = DependentChannel->GetObjectStaticBuffer(ReplicatingObject);
 
-		ResolveObjectReferences(RepLayout, ReplicatingObject, *RepState, RepState->ReferenceMap, ShadowData.GetData(), (uint8*)ReplicatingObject, ReplicatingObject->GetClass()->GetPropertiesSize(), RepNotifies, bSomeObjectsWereMapped, bStillHasUnresolved);
+		ResolveObjectReferences(RepLayout, ReplicatingObject, *RepState, RepState->ReferenceMap, ShadowData.GetData(), (uint8*)ReplicatingObject, ReplicatingObject->GetClass()->GetPropertiesSize(), RepNotifies, bSomeObjectsWereMapped);
 
 		if (bSomeObjectsWereMapped)
 		{
@@ -1987,7 +1986,7 @@ void USpatialReceiver::ResolveIncomingOperations(UObject* Object, const FUnrealO
 	}
 }
 
-void USpatialReceiver::ResolveObjectReferences(FRepLayout& RepLayout, UObject* ReplicatedObject, FSpatialObjectRepState& RepState, FObjectReferencesMap& ObjectReferencesMap, uint8* RESTRICT StoredData, uint8* RESTRICT Data, int32 MaxAbsOffset, TArray<UProperty*>& RepNotifies, bool& bOutSomeObjectsWereMapped, bool& bOutStillHasUnresolved)
+void USpatialReceiver::ResolveObjectReferences(FRepLayout& RepLayout, UObject* ReplicatedObject, FSpatialObjectRepState& RepState, FObjectReferencesMap& ObjectReferencesMap, uint8* RESTRICT StoredData, uint8* RESTRICT Data, int32 MaxAbsOffset, TArray<UProperty*>& RepNotifies, bool& bOutSomeObjectsWereMapped)
 {
 	for (auto It = ObjectReferencesMap.CreateIterator(); It; ++It)
 	{
@@ -2024,12 +2023,7 @@ void USpatialReceiver::ResolveObjectReferences(FRepLayout& RepLayout, UObject* R
 
 			int32 NewMaxOffset = Array->Num() * Property->ElementSize;
 
-			bool bArrayHasUnresolved = false;
-			ResolveObjectReferences(RepLayout, ReplicatedObject, RepState, *ObjectReferences.Array, bIsHandover ? nullptr : (uint8*)StoredArray->GetData(), (uint8*)Array->GetData(), NewMaxOffset, RepNotifies, bOutSomeObjectsWereMapped, bArrayHasUnresolved);
-			if (bArrayHasUnresolved)
-			{
-				bOutStillHasUnresolved = true;
-			}
+			ResolveObjectReferences(RepLayout, ReplicatedObject, RepState, *ObjectReferences.Array, bIsHandover ? nullptr : (uint8*)StoredArray->GetData(), (uint8*)Array->GetData(), NewMaxOffset, RepNotifies, bOutSomeObjectsWereMapped);
 			continue;
 		}
 
@@ -2086,26 +2080,24 @@ void USpatialReceiver::ResolveObjectReferences(FRepLayout& RepLayout, UObject* R
 			{
 				TSet<FUnrealObjectRef> NewMappedRefs;
 				TSet<FUnrealObjectRef> NewUnresolvedRefs;
-				FSpatialNetBitReader ValueDataReader(PackageMap, ObjectReferences.Buffer.GetData(), ObjectReferences.NumBufferBits, &NewMappedRefs, NewUnresolvedRefs);
+				FSpatialNetBitReader ValueDataReader(PackageMap, ObjectReferences.Buffer.GetData(), ObjectReferences.NumBufferBits, NewMappedRefs, NewUnresolvedRefs);
 
 				check(Property->IsA<UArrayProperty>());
 				UScriptStruct* NetDeltaStruct = GetFastArraySerializerProperty(Cast<UArrayProperty>(Property));
 
 				FSpatialNetDeltaSerializeInfo::DeltaSerializeRead(NetDriver, ValueDataReader, ReplicatedObject, Parent->ArrayIndex, Parent->Property, NetDeltaStruct);
 
-				if (NewUnresolvedRefs.Num() > 0)
-				{
-					bOutStillHasUnresolved = true;
-				}
 				ObjectReferences.MappedRefs.Append(NewMappedRefs);
 			}
 			else
 			{
 				TSet<FUnrealObjectRef> NewMappedRefs;
 				TSet<FUnrealObjectRef> NewUnresolvedRefs;
-				FSpatialNetBitReader BitReader(PackageMap, ObjectReferences.Buffer.GetData(), ObjectReferences.NumBufferBits, &NewMappedRefs, NewUnresolvedRefs);
+				FSpatialNetBitReader BitReader(PackageMap, ObjectReferences.Buffer.GetData(), ObjectReferences.NumBufferBits, NewMappedRefs, NewUnresolvedRefs);
 				check(Property->IsA<UStructProperty>());
-				ReadStructProperty(BitReader, Cast<UStructProperty>(Property), NetDriver, Data + AbsOffset, bOutStillHasUnresolved);
+
+				bool bHasUnresolved = false;
+				ReadStructProperty(BitReader, Cast<UStructProperty>(Property), NetDriver, Data + AbsOffset, bHasUnresolved);
 
 				ObjectReferences.MappedRefs.Append(NewMappedRefs);
 			}
@@ -2117,11 +2109,6 @@ void USpatialReceiver::ResolveObjectReferences(FRepLayout& RepLayout, UObject* R
 					RepNotifies.AddUnique(Parent->Property);
 				}
 			}
-		}
-
-		if (ObjectReferences.UnresolvedRefs.Num() > 0)
-		{
-			bOutStillHasUnresolved = true;
 		}
 	}
 }
@@ -2185,7 +2172,7 @@ void USpatialReceiver::PeriodicallyProcessIncomingRPCs()
 	}, GetDefault<USpatialGDKSettings>()->QueuedIncomingRPCWaitTime, true);
 }
 
-void USpatialReceiver::MoveMappedObjectToUnmapped(FUnrealObjectRef& Ref)
+void USpatialReceiver::MoveMappedObjectToUnmapped(const FUnrealObjectRef& Ref)
 {
 	if (TSet<FSpatialObjectRepState*>* RepStatesWithMappedRef = ObjectRefToRepStateMap.Find(Ref))
 	{
@@ -2213,9 +2200,9 @@ void USpatialReceiver::CleanupRepStateMap(FSpatialObjectRepState& RepState)
 	for (const FUnrealObjectRef& Ref : RepState.ReferencedObj)
 	{
 		TSet<FSpatialObjectRepState*>* RepStatesWithMappedRef = ObjectRefToRepStateMap.Find(Ref);
-		if (ensureMsgf(RepStatesWithMappedRef, TEXT("Ref to entity %i on object %s is missing its referenced entry in the Ref/RepState map"), Ref.Entity, *GetObjectNameFromRepState(RepState)))
+		if (ensureMsgf(RepStatesWithMappedRef, TEXT("Ref to entity %lld on object %s is missing its referenced entry in the Ref/RepState map"), Ref.Entity, *GetObjectNameFromRepState(RepState)))
 		{
-			checkf(RepStatesWithMappedRef->Contains(&RepState), TEXT("Ref to entity %i on object %s is missing its referenced entry in the Ref/RepState map"), Ref.Entity, *GetObjectNameFromRepState(RepState));
+			checkf(RepStatesWithMappedRef->Contains(&RepState), TEXT("Ref to entity %lld on object %s is missing its referenced entry in the Ref/RepState map"), Ref.Entity, *GetObjectNameFromRepState(RepState));
 			RepStatesWithMappedRef->Remove(&RepState);
 			if (RepStatesWithMappedRef->Num() == 0)
 			{

@@ -203,7 +203,7 @@ void ComponentReader::ApplySchemaObject(Schema_Object* ComponentObject, UObject&
 					int64 CountBits = ValueData.Num() * 8;
 					TSet<FUnrealObjectRef> NewMappedRefs;
 					TSet<FUnrealObjectRef> NewUnresolvedRefs;
-					FSpatialNetBitReader ValueDataReader(PackageMap, ValueData.GetData(), CountBits, &NewMappedRefs, NewUnresolvedRefs);
+					FSpatialNetBitReader ValueDataReader(PackageMap, ValueData.GetData(), CountBits, NewMappedRefs, NewUnresolvedRefs);
 
 					if (ValueData.Num() > 0)
 					{
@@ -326,7 +326,7 @@ void ComponentReader::ApplyProperty(Schema_Object* Object, Schema_FieldId FieldI
 		int64 CountBits = ValueData.Num() * 8;
 		TSet<FUnrealObjectRef> NewDynamicRefs;
 		TSet<FUnrealObjectRef> NewUnresolvedRefs;
-		FSpatialNetBitReader ValueDataReader(PackageMap, ValueData.GetData(), CountBits, &NewDynamicRefs, NewUnresolvedRefs);
+		FSpatialNetBitReader ValueDataReader(PackageMap, ValueData.GetData(), CountBits, NewDynamicRefs, NewUnresolvedRefs);
 		bool bHasUnmapped = false;
 
 		ReadStructProperty(ValueDataReader, StructProperty, NetDriver, Data, bHasUnmapped);

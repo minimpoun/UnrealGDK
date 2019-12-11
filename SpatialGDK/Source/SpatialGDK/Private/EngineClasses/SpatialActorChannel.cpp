@@ -132,6 +132,8 @@ void FSpatialObjectRepState::GatherObjectRef(TSet<FUnrealObjectRef>& OutReferenc
 	}
 
 	OutUnresolved.Append(CurReferences.UnresolvedRefs);
+
+	// Add both kind of references to OutReferenced map, it's simpler to manage the Ref to RepState map that way.
 	OutReferenced.Append(CurReferences.UnresolvedRefs);
 	OutReferenced.Append(CurReferences.MappedRefs);
 }
@@ -147,33 +149,8 @@ void FSpatialObjectRepState::UpdateRefToRepStateMap(FObjectToRepStateMap& RepSta
 		GatherObjectRef(LocalReferencedObj, UnresolvedRefs, Entry.Value);
 	}
 
-	// TODO : Support references in structures updated by deltas.
-	//UObject* Object = GetObject();
-	//
-	//// Gather guids on fast tarray
-	//for (const int32 CustomIndex : LifetimeCustomDeltaProperties)
-	//{
-	//	FRepRecord* Rep = &ObjectClass->ClassReps[CustomIndex];
-	//
-	//	UStructProperty* StructProperty = CastChecked< UStructProperty >(Rep->Property);
-	//
-	//	FNetDeltaSerializeInfo Parms;
-	//
-	//	FNetSerializeCB NetSerializeCB(Connection->Driver);
-	//
-	//	Parms.NetSerializeCB = &NetSerializeCB;
-	//	Parms.GatherGuidReferences = &LocalReferencedGuids;
-	//	Parms.TrackedGuidMemoryBytes = &LocalTrackedGuidMemoryBytes;
-	//
-	//	UScriptStruct::ICppStructOps* CppStructOps = StructProperty->Struct->GetCppStructOps();
-	//
-	//	Parms.Struct = StructProperty->Struct;
-	//
-	//	if (Object != nullptr)
-	//	{
-	//		CppStructOps->NetDeltaSerialize(Parms, StructProperty->ContainerPtrToValuePtr<void>(Object, Rep->Index));
-	//	}
-	//}
+	// TODO : Support references in structures updated by deltas. UNR-2556
+	// Look for the code iterating over LifetimeCustomDeltaProperties in the equivalent FObjectReplicator method.
 
 	// Go over all referenced guids, and make sure we're tracking them in the GuidToReplicatorMap
 	for (const FUnrealObjectRef& Ref : LocalReferencedObj)
@@ -189,11 +166,11 @@ void FSpatialObjectRepState::UpdateRefToRepStateMap(FObjectToRepStateMap& RepSta
 	{
 		if (!LocalReferencedObj.Contains(Ref))
 		{
-			TSet< FSpatialObjectRepState* >& RepStatesWithMappedRef = RepStateMap.FindChecked(Ref);
+			TSet< FSpatialObjectRepState* >& RepStatesWithRef = RepStateMap.FindChecked(Ref);
 
-			RepStatesWithMappedRef.Remove(this);
+			RepStatesWithRef.Remove(this);
 
-			if (RepStatesWithMappedRef.Num() == 0)
+			if (RepStatesWithRef.Num() == 0)
 			{
 				RepStateMap.Remove(Ref);
 			}
@@ -668,8 +645,11 @@ int64 USpatialActorChannel::ReplicateActor()
 			if (!RepComp.Value()->GetWeakObjectPtr().IsValid())
 			{
 				FUnrealObjectRef ObjectRef = NetDriver->PackageMap->GetUnrealObjectRefFromNetGUID(RepComp.Value().Get().ObjectNetGUID);
+
 				if (ObjectRef.IsValid())
 				{
+					OnSubobjectDeleted(ObjectRef, RepComp.Key());
+
 					Sender->SendRemoveComponent(EntityId, NetDriver->ClassInfoManager->GetClassInfoByComponentId(ObjectRef.Offset));
 				}
 
@@ -1259,7 +1239,7 @@ void USpatialActorChannel::RemoveRepNotifiesWithUnresolvedObjs(TArray<UProperty*
 				continue;
 			}
 
-			// Only when there are unresolved refs.
+			// Skip only when there are unresolved refs (FObjectReferencesMap entry contains both mapped and unresolved references).
 			if (ObjRef.Value.UnresolvedRefs.Num() == 0)
 			{
 				continue;
@@ -1318,5 +1298,16 @@ void USpatialActorChannel::ClientProcessOwnershipChange(bool bNewNetOwned)
 	{
 		bNetOwned = bNewNetOwned;
 		Sender->SendComponentInterestForActor(this, GetEntityId(), bNetOwned);
+	}
+}
+void USpatialActorChannel::OnSubobjectDeleted(const FUnrealObjectRef& ObjectRef, UObject* Object)
+{
+	CreateSubObjects.Remove(Object);
+
+	Receiver->MoveMappedObjectToUnmapped(ObjectRef);
+	if (FSpatialObjectRepState* SubObjectRefMap = ObjectReferenceMap.Find(Object))
+	{
+		Receiver->CleanupRepStateMap(*SubObjectRefMap);
+		ObjectReferenceMap.Remove(Object);
 	}
 }

@@ -80,10 +80,6 @@ struct FPendingSubobjectAttachment
 	TSet<Worker_ComponentId> PendingAuthorityDelegations;
 };
 
-class FSpatialObjectRepState;
-
-using FObjectToRepStateMap = TMap < FUnrealObjectRef, TSet<FSpatialObjectRepState*> >;
-
 // Utility class to manage mapped and unresolved references.
 // Reproduces what is happening with FRepState::GuidReferencesMap, but with FUnrealObjectRef instead of FNetworkGUID
 class FSpatialObjectRepState
@@ -251,6 +247,9 @@ public:
 
 	bool IsListening() const;
 	const FClassInfo* TryResolveNewDynamicSubobjectAndGetClassInfo(UObject* Object);
+
+	// Call when a subobject is deleted to unmap its references and cleanup its cached informations.
+	void OnSubobjectDeleted(const FUnrealObjectRef& ObjectRef, UObject* Object);
 
 protected:
 	// Begin UChannel interface

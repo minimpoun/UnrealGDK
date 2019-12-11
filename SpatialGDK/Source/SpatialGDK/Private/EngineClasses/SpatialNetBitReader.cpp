@@ -9,7 +9,7 @@
 
 DEFINE_LOG_CATEGORY(LogSpatialNetBitReader);
 
-FSpatialNetBitReader::FSpatialNetBitReader(USpatialPackageMapClient* InPackageMap, uint8* Source, int64 CountBits, TSet<FUnrealObjectRef>* InDynamicRefs, TSet<FUnrealObjectRef>& InUnresolvedRefs)
+FSpatialNetBitReader::FSpatialNetBitReader(USpatialPackageMapClient* InPackageMap, uint8* Source, int64 CountBits, TSet<FUnrealObjectRef>& InDynamicRefs, TSet<FUnrealObjectRef>& InUnresolvedRefs)
 	: FNetBitReader(InPackageMap, Source, CountBits)
 	, DynamicRefs(InDynamicRefs)
 	, UnresolvedRefs(InUnresolvedRefs) {}
@@ -56,9 +56,9 @@ UObject* FSpatialNetBitReader::ReadObject(bool& bUnresolved)
 	{
 		UnresolvedRefs.Add(ObjectRef);
 	}
-	else if (DynamicRefs && Value && !Value->IsFullNameStableForNetworking())
+	else if (Value && !Value->IsFullNameStableForNetworking())
 	{
-		DynamicRefs->Add(ObjectRef);
+		DynamicRefs.Add(ObjectRef);
 	}
 
 	return Value;
