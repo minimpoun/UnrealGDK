@@ -133,7 +133,8 @@ void FSpatialObjectRepState::GatherObjectRef(TSet<FUnrealObjectRef>& OutReferenc
 
 	OutUnresolved.Append(CurReferences.UnresolvedRefs);
 
-	// Add both kind of references to OutReferenced map, it's simpler to manage the Ref to RepState map that way.
+	// Add both kind of references to OutReferenced map.
+	// It is simpler to manage the Ref to RepState map that way by not requiring strict partitioning between both sets.
 	OutReferenced.Append(CurReferences.UnresolvedRefs);
 	OutReferenced.Append(CurReferences.MappedRefs);
 }
@@ -282,7 +283,6 @@ bool USpatialActorChannel::CleanUp(const bool bForDestroy, EChannelCloseReason C
 			Receiver->ClearPendingRPCs(EntityId);
 			Sender->ClearPendingRPCs(EntityId);
 		}
-		
 		NetDriver->RemoveActorChannel(EntityId, *this);
 	}
 

@@ -743,10 +743,9 @@ void USpatialReceiver::RemoveActor(Worker_EntityId EntityId)
 		return;
 	}
 
-	
 	if (USpatialActorChannel* ActorChannel = NetDriver->GetActorChannelByEntityId(EntityId))
 	{
-		for (UObject*SubObject : ActorChannel->CreateSubObjects)
+		for (UObject* SubObject : ActorChannel->CreateSubObjects)
 		{
 			if (SubObject)
 			{
@@ -756,12 +755,9 @@ void USpatialReceiver::RemoveActor(Worker_EntityId EntityId)
 			}
 		}
 
-		if (Actor != nullptr)
-		{
-			FUnrealObjectRef ObjectRef = FUnrealObjectRef::FromObjectPtr(Actor, Cast<USpatialPackageMapClient>(PackageMap));
-			// Unmap this object so we can remap it if it becomes relevant again in the future
-			MoveMappedObjectToUnmapped(ObjectRef);
-		}
+		FUnrealObjectRef ObjectRef = FUnrealObjectRef::FromObjectPtr(Actor, Cast<USpatialPackageMapClient>(PackageMap));
+		// Unmap this object so we can remap it if it becomes relevant again in the future
+		MoveMappedObjectToUnmapped(ObjectRef);
 
 		for (auto& ChannelRefs : ActorChannel->ObjectReferenceMap)
 		{
