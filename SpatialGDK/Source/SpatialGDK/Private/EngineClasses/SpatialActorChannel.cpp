@@ -158,7 +158,7 @@ void FSpatialObjectRepState::UpdateRefToRepStateMap(FObjectToRepStateMap& RepSta
 	{
 		if (!ReferencedObj.Contains(Ref))
 		{
-			RepStateMap.FindOrAdd(Ref).Add(this);
+			RepStateMap.FindOrAdd(Ref).Add(ThisObj);
 		}
 	}
 
@@ -167,9 +167,9 @@ void FSpatialObjectRepState::UpdateRefToRepStateMap(FObjectToRepStateMap& RepSta
 	{
 		if (!LocalReferencedObj.Contains(Ref))
 		{
-			TSet< FSpatialObjectRepState* >& RepStatesWithRef = RepStateMap.FindChecked(Ref);
+			TSet<FChannelObjectPair>& RepStatesWithRef = RepStateMap.FindChecked(Ref);
 
-			RepStatesWithRef.Remove(this);
+			RepStatesWithRef.Remove(ThisObj);
 
 			if (RepStatesWithRef.Num() == 0)
 			{

@@ -184,7 +184,7 @@ private:
 
 	// Map from references to replicated objects to properties using these references.
 	// Useful to manage entities going in and out of interest, in order to recover references to actors.
-	TMap<FUnrealObjectRef, TSet<FSpatialObjectRepState*>> ObjectRefToRepStateMap;
+	FObjectToRepStateMap ObjectRefToRepStateMap;
 
 	TArray<TPair<UObject*, FUnrealObjectRef>> ResolvedObjectQueue;
 	

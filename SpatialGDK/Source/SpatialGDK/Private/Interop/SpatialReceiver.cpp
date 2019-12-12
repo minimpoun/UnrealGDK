@@ -1911,7 +1911,7 @@ void USpatialReceiver::ResolveIncomingOperations(UObject* Object, const FUnrealO
 	// TODO: queue up resolved objects since they were resolved during process ops
 	// and then resolve all of them at the end of process ops - UNR:582
 
-	TSet<FSpatialObjectRepState*>* TargetObjectSet = ObjectRefToRepStateMap.Find(ObjectRef);
+	TSet<FChannelObjectPair>* TargetObjectSet = ObjectRefToRepStateMap.Find(ObjectRef);
 	if (!TargetObjectSet)
 	{
 		return;
@@ -1919,28 +1919,32 @@ void USpatialReceiver::ResolveIncomingOperations(UObject* Object, const FUnrealO
 
 	UE_LOG(LogSpatialReceiver, Verbose, TEXT("Resolving incoming operations depending on object ref %s, resolved object: %s"), *ObjectRef.ToString(), *Object->GetName());
 
-	for (auto RepStateIter = TargetObjectSet->CreateIterator(); RepStateIter; ++RepStateIter)
+	for (auto ChannelObjectIter = TargetObjectSet->CreateIterator(); ChannelObjectIter; ++ChannelObjectIter)
 	{
-		FSpatialObjectRepState* RepState = *RepStateIter;
-		if (!RepState->UnresolvedRefs.Contains(ObjectRef))
+		USpatialActorChannel* DependentChannel = ChannelObjectIter->Key.Get();
+		if (!DependentChannel)
 		{
+			ChannelObjectIter.RemoveCurrent();
 			continue;
 		}
 
-		FChannelObjectPair ChannelObjectPair = RepState->GetChannelObjectPair();
-		USpatialActorChannel* DependentChannel = ChannelObjectPair.Key.Get();
-		
-		if (!RepState->GetChannelObjectPair().Value.IsValid())
+		UObject* ReplicatingObject = ChannelObjectIter->Value.Get();
+
+		if (!ReplicatingObject)
 		{
-			if (DependentChannel->ObjectReferenceMap.Find(ChannelObjectPair.Value))
+			if (DependentChannel->ObjectReferenceMap.Find(ChannelObjectIter->Value))
 			{
-				DependentChannel->ObjectReferenceMap.Remove(ChannelObjectPair.Value);
-				RepStateIter.RemoveCurrent();
+				DependentChannel->ObjectReferenceMap.Remove(ChannelObjectIter->Value);
+				ChannelObjectIter.RemoveCurrent();
 			}
 			continue;
 		}
 
-		UObject* ReplicatingObject = ChannelObjectPair.Value.Get();
+		FSpatialObjectRepState* RepState = DependentChannel->ObjectReferenceMap.Find(ChannelObjectIter->Value);
+		if (!RepState || !RepState->UnresolvedRefs.Contains(ObjectRef))
+		{
+			continue;
+		}
 
 		// Check whether the resolved object has been torn off, or is on an actor that has been torn off.
 		if (AActor* AsActor = Cast<AActor>(ReplicatingObject))
@@ -1948,7 +1952,7 @@ void USpatialReceiver::ResolveIncomingOperations(UObject* Object, const FUnrealO
 			if (AsActor->GetTearOff())
 			{
 				UE_LOG(LogSpatialActorChannel, Log, TEXT("Actor to be resolved was torn off, so ignoring incoming operations. Object ref: %s, resolved object: %s"), *ObjectRef.ToString(), *Object->GetName());
-				DependentChannel->ObjectReferenceMap.Remove(ChannelObjectPair.Value);
+				DependentChannel->ObjectReferenceMap.Remove(ChannelObjectIter->Value);
 				continue;
 			}
 		}
@@ -1957,7 +1961,7 @@ void USpatialReceiver::ResolveIncomingOperations(UObject* Object, const FUnrealO
 			if (OuterActor->GetTearOff())
 			{
 				UE_LOG(LogSpatialActorChannel, Log, TEXT("Owning Actor of the object to be resolved was torn off, so ignoring incoming operations. Object ref: %s, resolved object: %s"), *ObjectRef.ToString(), *Object->GetName());
-				DependentChannel->ObjectReferenceMap.Remove(ChannelObjectPair.Value);
+				DependentChannel->ObjectReferenceMap.Remove(ChannelObjectIter->Value);
 				continue;
 			}
 		}
@@ -2170,11 +2174,17 @@ void USpatialReceiver::PeriodicallyProcessIncomingRPCs()
 
 void USpatialReceiver::MoveMappedObjectToUnmapped(const FUnrealObjectRef& Ref)
 {
-	if (TSet<FSpatialObjectRepState*>* RepStatesWithMappedRef = ObjectRefToRepStateMap.Find(Ref))
+	if (TSet<FChannelObjectPair>* RepStatesWithMappedRef = ObjectRefToRepStateMap.Find(Ref))
 	{
-		for (FSpatialObjectRepState* RepState : *RepStatesWithMappedRef)
+		for (const FChannelObjectPair& ChannelObject : *RepStatesWithMappedRef)
 		{
-			RepState->MoveMappedObjectToUnmapped(Ref);
+			if (USpatialActorChannel* Channel = ChannelObject.Key.Get())
+			{
+				if (FSpatialObjectRepState* RepState = Channel->ObjectReferenceMap.Find(ChannelObject.Value))
+				{
+					RepState->MoveMappedObjectToUnmapped(Ref);
+				}
+			}
 		}
 	}
 }
@@ -2195,11 +2205,11 @@ void USpatialReceiver::CleanupRepStateMap(FSpatialObjectRepState& RepState)
 {
 	for (const FUnrealObjectRef& Ref : RepState.ReferencedObj)
 	{
-		TSet<FSpatialObjectRepState*>* RepStatesWithMappedRef = ObjectRefToRepStateMap.Find(Ref);
+		TSet<FChannelObjectPair>* RepStatesWithMappedRef = ObjectRefToRepStateMap.Find(Ref);
 		if (ensureMsgf(RepStatesWithMappedRef, TEXT("Ref to entity %lld on object %s is missing its referenced entry in the Ref/RepState map"), Ref.Entity, *GetObjectNameFromRepState(RepState)))
 		{
-			checkf(RepStatesWithMappedRef->Contains(&RepState), TEXT("Ref to entity %lld on object %s is missing its referenced entry in the Ref/RepState map"), Ref.Entity, *GetObjectNameFromRepState(RepState));
-			RepStatesWithMappedRef->Remove(&RepState);
+			checkf(RepStatesWithMappedRef->Contains(RepState.GetChannelObjectPair()), TEXT("Ref to entity %lld on object %s is missing its referenced entry in the Ref/RepState map"), Ref.Entity, *GetObjectNameFromRepState(RepState));
+			RepStatesWithMappedRef->Remove(RepState.GetChannelObjectPair());
 			if (RepStatesWithMappedRef->Num() == 0)
 			{
 				ObjectRefToRepStateMap.Remove(Ref);
