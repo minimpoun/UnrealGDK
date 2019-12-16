@@ -95,11 +95,6 @@ Worker_RequestId USpatialSender::CreateEntity(USpatialActorChannel* Channel)
 
 	for (const FName& WorkerType : GetDefault<USpatialGDKSettings>()->ServerWorkerTypes)
 	{
-		if (ActorGroupManager->IsExcludedWorkerTypeForActor(Actor, WorkerType))
-		{
-			UE_LOG(LogTemp, Display, TEXT("[MYY] WorkerType %s excluded for Actor %s"), *WorkerType.ToString(), *GetPathNameSafe(Actor));
-			continue;
-		}
 		WorkerAttributeSet ServerWorkerAttributeSet = { WorkerType.ToString() };
 
 		AnyServerRequirementSet.Add(ServerWorkerAttributeSet);
