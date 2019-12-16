@@ -1,5 +1,4 @@
 // Copyright (c) Improbable Worlds Ltd, All Rights Reserved
-
 #include "Utils/SpatialStatics.h"
 
 #include "Engine/World.h"
@@ -7,8 +6,10 @@
 #include "GeneralProjectSettings.h"
 #include "Kismet/KismetSystemLibrary.h"
 #include "SpatialConstants.h"
+#include "SpatialGameInstance.h"
 #include "SpatialGDKSettings.h"
 #include "Utils/SpatialActorGroupManager.h"
+
 
 DEFINE_LOG_CATEGORY(LogSpatial);
 
@@ -21,10 +22,10 @@ SpatialActorGroupManager* USpatialStatics::GetActorGroupManager(const UObject* W
 {
 	if (const UWorld* World = WorldContext->GetWorld())
 	{
-		if (const USpatialNetDriver* SpatialNetDriver = Cast<USpatialNetDriver>(World->GetNetDriver()))
+		if (const USpatialGameInstance* SpatialGameInstance = Cast<USpatialGameInstance>(World->GetGameInstance()))
 		{
-			check(SpatialNetDriver->ActorGroupManager.IsValid());
-			return SpatialNetDriver->ActorGroupManager.Get();
+			check(SpatialGameInstance->ActorGroupManager.IsValid());
+			return SpatialGameInstance->ActorGroupManager.Get();
 		}
 	}
 	return nullptr;

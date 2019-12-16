@@ -71,8 +71,8 @@ void USpatialSender::Init(USpatialNetDriver* InNetDriver, FTimerManager* InTimer
 	Receiver = InNetDriver->Receiver;
 	PackageMap = InNetDriver->PackageMap;
 	ClassInfoManager = InNetDriver->ClassInfoManager;
-	check(InNetDriver->ActorGroupManager.IsValid());
-	ActorGroupManager = InNetDriver->ActorGroupManager.Get();
+	check(InNetDriver->ActorGroupManager != nullptr);
+	ActorGroupManager = InNetDriver->ActorGroupManager;
 	TimerManager = InTimerManager;
 
 	OutgoingRPCs.BindProcessingFunction(FProcessRPCDelegate::CreateUObject(this, &USpatialSender::SendRPC));
@@ -95,6 +95,11 @@ Worker_RequestId USpatialSender::CreateEntity(USpatialActorChannel* Channel)
 
 	for (const FName& WorkerType : GetDefault<USpatialGDKSettings>()->ServerWorkerTypes)
 	{
+		if (ActorGroupManager->IsExcludedWorkerTypeForActor(Actor, WorkerType))
+		{
+			UE_LOG(LogTemp, Display, TEXT("[MYY] WorkerType %s excluded for Actor %s"), *WorkerType.ToString(), *GetPathNameSafe(Actor));
+			continue;
+		}
 		WorkerAttributeSet ServerWorkerAttributeSet = { WorkerType.ToString() };
 
 		AnyServerRequirementSet.Add(ServerWorkerAttributeSet);
@@ -1008,7 +1013,7 @@ void USpatialSender::ProcessPositionUpdates()
 
 void USpatialSender::SendCreateEntityRequest(USpatialActorChannel* Channel)
 {
-	UE_LOG(LogSpatialSender, Log, TEXT("Sending create entity request for %s with EntityId %lld"), *Channel->Actor->GetName(), Channel->GetEntityId());
+	UE_LOG(LogSpatialSender, Log, TEXT("Sending create entity request for %s with EntityId %lld, HasAuthority: %d"), *Channel->Actor->GetName(), Channel->GetEntityId(), Channel->Actor->HasAuthority());
 
 	Worker_RequestId RequestId = CreateEntity(Channel);
 	Receiver->AddPendingActorRequest(RequestId, Channel);

@@ -124,6 +124,7 @@ void USpatialGDKSettings::PostInitProperties()
 }
 
 #if WITH_EDITOR
+
 void USpatialGDKSettings::PostEditChangeProperty(struct FPropertyChangedEvent& PropertyChangedEvent)
 {
 	Super::PostEditChangeProperty(PropertyChangedEvent);
@@ -145,6 +146,22 @@ void USpatialGDKSettings::PostEditChangeProperty(struct FPropertyChangedEvent& P
 			FText::FromString(FString::Printf(TEXT("You MUST regenerate schema using the full scan option after changing the number of max dynamic subobjects. "
 				"Failing to do will result in unintended behavior or crashes!"))));
 	}
+	else if (Name == GET_MEMBER_NAME_CHECKED(USpatialGDKSettings, ActorGroups))
+	{
+		TArray<FName> Keys;
+		ActorGroups.GetKeys(Keys);
+		// Check that ExcludedWorkers are all still valid (do not contain the OwningWorkerType)
+		for (FName Key : Keys)
+		{
+			FActorGroupInfo* ActorGroup = ActorGroups.Find(Key);
+			if (ActorGroup->ExcludedWorkerTypes.Contains(ActorGroup->OwningWorkerType))
+			{
+				ActorGroup->ExcludedWorkerTypes.Remove(ActorGroup->OwningWorkerType);
+			}
+		}
+	}
+
+
 }
 #endif
 

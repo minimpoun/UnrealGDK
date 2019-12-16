@@ -87,3 +87,22 @@ bool SpatialActorGroupManager::IsSameWorkerType(const AActor* ActorA, const AAct
 
 	return (WorkerTypeA == WorkerTypeB);
 }
+
+bool SpatialActorGroupManager::IsExcludedWorkerTypeForActor(const AActor* Actor, const FName& WorkerTypeName)
+{
+	if (Actor == nullptr)
+	{
+		return false;
+	}
+
+	if (const USpatialGDKSettings* Settings = GetDefault<USpatialGDKSettings>())
+	{
+		if (const FActorGroupInfo* ActorGroup = Settings->ActorGroups.Find(GetActorGroupForClass(Actor->GetClass())))
+		{
+			FWorkerType WorkerType = FWorkerType(WorkerTypeName);
+			return ActorGroup->ExcludedWorkerTypes.Contains(WorkerType);
+		}
+	}
+
+	return false;
+}

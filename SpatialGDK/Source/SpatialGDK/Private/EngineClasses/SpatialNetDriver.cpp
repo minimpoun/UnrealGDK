@@ -1,5 +1,4 @@
 // Copyright (c) Improbable Worlds Ltd, All Rights Reserved
-
 #include "EngineClasses/SpatialNetDriver.h"
 
 #include "Engine/ActorChannel.h"
@@ -90,9 +89,15 @@ bool USpatialNetDriver::InitBase(bool bInitAsClient, FNetworkNotify* InNotify, c
 
 	bConnectAsClient = bInitAsClient;
 
+	UE_LOG(LogTemp, Log, TEXT("[MY] SpatialNetDriver Init Base %s"), *GetGameInstance()->GetSpatialWorkerType().ToString());
 	FCoreUObjectDelegates::PostLoadMapWithWorld.AddUObject(this, &USpatialNetDriver::OnMapLoaded);
 
 	FWorldDelegates::LevelAddedToWorld.AddUObject(this, &USpatialNetDriver::OnLevelAddedToWorld);
+
+	if (GetWorld() != nullptr)
+	{
+		GetWorld()->AddOnActorSpawnedHandler(FOnActorSpawned::FDelegate::CreateUObject(this, &USpatialNetDriver::OnActorSpawned));
+	}
 
 	// Make absolutely sure that the actor channel that we are using is our Spatial actor channel
 	// Copied from what the Engine does with UActorChannel
@@ -120,9 +125,8 @@ bool USpatialNetDriver::InitBase(bool bInitAsClient, FNetworkNotify* InNotify, c
 		bPersistSpatialConnection = true;
 	}
 
-	// Initialize ActorGroupManager as it is a depdency of ClassInfoManager (see below)
-	ActorGroupManager = MakeUnique<SpatialActorGroupManager>();
-	ActorGroupManager->Init();
+	ActorGroupManager = GetGameInstance()->ActorGroupManager.Get();
+	
 
 	// Initialize ClassInfoManager here because it needs to load SchemaDatabase.
 	// We shouldn't do that in CreateAndInitializeCoreClasses because it is called
@@ -132,7 +136,7 @@ bool USpatialNetDriver::InitBase(bool bInitAsClient, FNetworkNotify* InNotify, c
 	ClassInfoManager = NewObject<USpatialClassInfoManager>();
 
 	// If it fails to load, don't attempt to connect to spatial.
-	if (!ClassInfoManager->TryInit(this, ActorGroupManager.Get()))
+	if (!ClassInfoManager->TryInit(this, ActorGroupManager))
 	{
 		Error = TEXT("Failed to load Spatial SchemaDatabase! Make sure that schema has been generated for your project");
 		return false;
@@ -639,6 +643,25 @@ void USpatialNetDriver::QueryGSMToLoadMap()
 	GlobalStateManager->QueryGSM(QueryDelegate);
 }
 
+void USpatialNetDriver::OnActorSpawned(AActor* Actor)
+{
+	Worker_EntityId EntityId = PackageMap->GetEntityIdFromObject(Actor);
+	if (EntityId != SpatialConstants::INVALID_ENTITY_ID)
+	{
+		UE_LOG(LogTemp, Display, TEXT("[MYYY] Spawned %s, with valid netguid"), *GetPathNameSafe(Actor));
+		return;
+	}
+
+	if (USpatialStatics::IsActorGroupOwnerForActor(Actor))
+	{
+		UE_LOG(LogTemp, Display, TEXT("[MYYY] Spawned %s, actor group owner of %s"), *GetPathNameSafe(Actor), *USpatialStatics::GetActorGroupForActor(Actor).ToString());
+		return;
+	}
+
+	UE_LOG(LogTemp, Warning, TEXT("[MYYY] Spawned %s, no netguid, not actor group owner of %s"),
+		*GetPathNameSafe(Actor), *USpatialStatics::GetActorGroupForActor(Actor).ToString());
+}
+
 void USpatialNetDriver::OnMapLoaded(UWorld* LoadedWorld)
 {
 	if (LoadedWorld == nullptr)
@@ -702,14 +725,17 @@ void USpatialNetDriver::OnLevelAddedToWorld(ULevel* LoadedLevel, UWorld* OwningW
 		return;
 	}
 
+	UE_LOG(LogTemp, Display, TEXT("[MY] Level %s Loaded into World %s"), *GetPathNameSafe(LoadedLevel), *GetPathNameSafe(OwningWorld));
+
 	// If we have authority over the GSM when loading a sublevel, make sure we have authority
 	// over the actors in the sublevel.
-	if (GlobalStateManager != nullptr)
+	/*if (GlobalStateManager != nullptr && !USpatialStatics::IsSpatialOffloadingEnabled())
 	{
 		if (GlobalStateManager->HasAuthority())
 		{
 			for (auto Actor : LoadedLevel->Actors)
 			{
+
 				if (Actor->GetIsReplicated())
 				{
 					Actor->Role = ROLE_Authority;
@@ -717,7 +743,7 @@ void USpatialNetDriver::OnLevelAddedToWorld(ULevel* LoadedLevel, UWorld* OwningW
 				}
 			}
 		}
-	}
+	}*/
 }
 
 // NOTE: This method is a clone of the ProcessServerTravel located in GameModeBase with modifications to support Spatial.
@@ -838,6 +864,9 @@ void USpatialNetDriver::BeginDestroy()
 		GDKServices->GetLocalDeploymentManager()->OnDeploymentStart.Remove(SpatialDeploymentStartHandle);
 	}
 #endif
+
+	// null out reference to ActorGroupManger
+	ActorGroupManager = nullptr;
 }
 
 void USpatialNetDriver::PostInitProperties()

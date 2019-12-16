@@ -391,6 +391,7 @@ void USpatialReceiver::HandleActorAuthority(const Worker_AuthorityChangeOp& Op)
 
 				if (IsValid(NetDriver->GetActorChannelByEntityId(Op.entity_id)) || bDormantActor)
 				{
+					UE_LOG(LogTemp, Display, TEXT("[MYY] Gained Authority of Position of %s"), *GetPathNameSafe(Actor));
 					Actor->Role = ROLE_Authority;
 					Actor->RemoteRole = ROLE_SimulatedProxy;
 
@@ -443,6 +444,7 @@ void USpatialReceiver::HandleActorAuthority(const Worker_AuthorityChangeOp& Op)
 					ActorChannel->bCreatedEntity = false;
 				}
 
+				UE_LOG(LogTemp, Display, TEXT("[MYY] Lost Authority of %s"), *GetPathNameSafe(Actor));
 				Actor->Role = ROLE_SimulatedProxy;
 				Actor->RemoteRole = ROLE_Authority;
 
@@ -545,6 +547,10 @@ void USpatialReceiver::ReceiveActor(Worker_EntityId EntityId)
 
 		// Assume SimulatedProxy until we've been delegated Authority
 		bool bAuthority = StaticComponentView->GetAuthority(EntityId, Position::ComponentId) == WORKER_AUTHORITY_AUTHORITATIVE;
+		if (bAuthority)
+		{
+			UE_LOG(LogTemp, Display, TEXT("[MYY] Gaining authority of new Actor %s"), *GetPathNameSafe(EntityActor));
+		}
 		EntityActor->Role = bAuthority ? ROLE_Authority : ROLE_SimulatedProxy;
 		EntityActor->RemoteRole = bAuthority ? ROLE_SimulatedProxy : ROLE_Authority;
 		if (bAuthority)
@@ -904,6 +910,7 @@ AActor* USpatialReceiver::CreateActor(UnrealMetadata* UnrealMetadataComp, SpawnD
 	}
 
 	// Don't have authority over Actor until SpatialOS delegates authority
+	UE_LOG(LogTemp, Display, TEXT("[MYY] Relinquishing auth until spatial gives it back of %s"), *GetPathNameSafe(NewActor));
 	NewActor->Role = ROLE_SimulatedProxy;
 	NewActor->RemoteRole = ROLE_Authority;
 

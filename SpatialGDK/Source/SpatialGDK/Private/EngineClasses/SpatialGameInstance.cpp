@@ -14,9 +14,10 @@
 #include "EngineClasses/SpatialPendingNetGame.h"
 #include "Interop/Connection/SpatialWorkerConnection.h"
 #include "Utils/SpatialDebugger.h"
+#include "Utils/SpatialLatencyTracer.h"
 #include "Utils/SpatialMetrics.h"
 #include "Utils/SpatialMetricsDisplay.h"
-#include "Utils/SpatialLatencyTracer.h"
+#include "Utils/SpatialStatics.h"
 
 DEFINE_LOG_CATEGORY(LogSpatialGameInstance);
 
@@ -168,6 +169,11 @@ void USpatialGameInstance::Init()
 	Super::Init();
 
 	SpatialLatencyTracer = NewObject<USpatialLatencyTracer>(this);
+
+	FWorldDelegates::LevelInitializedNetworkActors.AddUObject(this, &USpatialGameInstance::OnLevelInitializedNetworkActors);
+
+	ActorGroupManager = MakeUnique<SpatialActorGroupManager>();
+	ActorGroupManager->Init();
 }
 
 void USpatialGameInstance::HandleOnConnected()
@@ -187,4 +193,66 @@ void USpatialGameInstance::HandleOnConnectionFailed(const FString& Reason)
 	SpatialLatencyTracer->ResetWorkerId();
 #endif
 	OnConnectionFailed.Broadcast(Reason);
+}
+
+
+void USpatialGameInstance::OnLevelInitializedNetworkActors(ULevel* LoadedLevel, UWorld *OwningWorld)
+{
+	const FString WorkerType = GetSpatialWorkerType().ToString();
+
+	UE_LOG(LogTemp, Log, TEXT("[MY] %s OnLevelInitializedNetworkActors %s %s"), *WorkerType, *GetPathNameSafe(LoadedLevel), *GetPathNameSafe(OwningWorld));
+	if (OwningWorld != GetWorld())
+	{
+		UE_LOG(LogTemp, Log, TEXT("[MY] %s World %s is not our world %s"), *WorkerType, *GetPathNameSafe(OwningWorld), *GetPathNameSafe(GetWorld()));
+		return;
+	}
+
+	if (!USpatialStatics::IsSpatialOffloadingEnabled())
+	{
+		return;
+	}
+
+	if (OwningWorld->WorldType != EWorldType::PIE
+		&& OwningWorld->WorldType != EWorldType::Game
+		&& OwningWorld->WorldType != EWorldType::GamePreview)
+	{
+		return;
+	}
+
+	UE_LOG(LogTemp, Display, TEXT("[MY] %s Level %s InitNetworkActors World %s"), *WorkerType, *GetPathNameSafe(LoadedLevel), *GetPathNameSafe(OwningWorld));
+
+	bool bIsServer = OwningWorld->IsServer();
+
+	for (int32 ActorIndex = 0; ActorIndex < LoadedLevel->Actors.Num(); ActorIndex++)
+	{
+		AActor* Actor = LoadedLevel->Actors[ActorIndex];
+
+		if (bIsServer)
+		{
+			if (!USpatialStatics::IsActorGroupOwnerForActor(Actor))
+			{
+				if (!Actor->bNetLoadOnNonAuthServer)
+				{
+					Actor->Destroy();
+				}
+				else
+				{
+					UE_LOG(LogTemp, Display, TEXT("[MY] %s Not Owner of %s, Exchanging Roles"), *WorkerType, *GetPathNameSafe(Actor));
+					ENetRole Temp = Actor->Role;
+					Actor->Role = Actor->RemoteRole;
+					Actor->RemoteRole = Temp;
+				}
+			}
+			//else
+			//{
+			//	// For any replicated Actor in the level, we want to delay entity creation/BeginPlay
+			//	// to make sure only one worker does it.
+			//	if (Actor->GetIsReplicated())
+			//	{
+			//		Actor->Role = ROLE_SimulatedProxy;
+			//		Actor->RemoteRole = ROLE_Authority;
+			//	}
+			//}
+		}
+	}
 }

@@ -150,10 +150,10 @@ public:
 	UPROPERTY()
 	UAbstractLockingPolicy* LockingPolicy;
 
-	TUniquePtr<SpatialActorGroupManager> ActorGroupManager;
 	TUniquePtr<SpatialLoadBalanceEnforcer> LoadBalanceEnforcer;
 	TUniquePtr<SpatialVirtualWorkerTranslator> VirtualWorkerTranslator;
 
+	SpatialActorGroupManager* ActorGroupManager;
 
 	Worker_EntityId WorkerEntityId = SpatialConstants::INVALID_ENTITY_ID;
 
@@ -220,6 +220,8 @@ private:
 
 	UFUNCTION()
 	void OnMapLoaded(UWorld* LoadedWorld);
+
+	void OnActorSpawned(AActor* Actor);
 
 	UFUNCTION()
 	void OnLevelAddedToWorld(ULevel* LoadedLevel, UWorld* OwningWorld);
