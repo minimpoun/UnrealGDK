@@ -3,7 +3,6 @@
 #include "WorkerTypeCustomization.h"
 
 #include "SpatialGDKSettings.h"
-#include "Utils/SpatialActorGroupManager.h"
 
 #include "PropertyCustomizationHelpers.h"
 #include "PropertyHandle.h"
@@ -27,7 +26,7 @@ void FWorkerTypeCustomization::CustomizeHeader(TSharedRef<class IPropertyHandle>
 		.ValueContent()
 			[
 				PropertyCustomizationHelpers::MakePropertyComboBox(WorkerTypeNameProperty,
-				FOnGetPropertyComboBoxStrings::CreateStatic(&FWorkerTypeCustomization::OnGetStrings, WorkerTypeNameProperty),
+				FOnGetPropertyComboBoxStrings::CreateStatic(&FWorkerTypeCustomization::OnGetStrings),
 				FOnGetPropertyComboBoxValue::CreateStatic(&FWorkerTypeCustomization::OnGetValue, WorkerTypeNameProperty),
 				FOnPropertyComboBoxValueSelected::CreateStatic(&FWorkerTypeCustomization::OnValueSelected, WorkerTypeNameProperty))
 			];
@@ -38,57 +37,15 @@ void FWorkerTypeCustomization::CustomizeChildren(TSharedRef<class IPropertyHandl
 {
 }
 
-void FWorkerTypeCustomization::OnGetStrings(TArray<TSharedPtr<FString>>& OutComboBoxStrings, TArray<TSharedPtr<class SToolTip>>& OutToolTips, TArray<bool>& OutRestrictedItems, TSharedPtr<IPropertyHandle> WorkerTypeNameHandle)
+void FWorkerTypeCustomization::OnGetStrings(TArray<TSharedPtr<FString>>& OutComboBoxStrings, TArray<TSharedPtr<class SToolTip>>& OutToolTips, TArray<bool>& OutRestrictedItems)
 {
-	if (!WorkerTypeNameHandle->IsValidHandle())
-	{
-		return;
-	}
-
-	TArray<UObject*> Objects;
-	WorkerTypeNameHandle->GetOuterObjects(Objects);
-
-	TSet<FName> RestrictedWorkerTypes;
-
-	if (USetProperty* SetProp = Cast<USetProperty>(WorkerTypeNameHandle->GetParentHandle()->GetParentHandle()->GetProperty()))
-	{
-		FScriptSetHelper SetHelper = FScriptSetHelper(SetProp, WorkerTypeNameHandle->GetParentHandle()->GetParentHandle()->GetValueBaseAddress((uint8*)(Objects[0])));
-		for (int i = 0; i < SetHelper.GetMaxIndex(); i++)
-		{
-			if (!SetHelper.IsValidIndex(i))
-			{
-				continue;
-			}
-			FWorkerType* FoundType = (FWorkerType*) SetHelper.GetElementPtr(i);
-			if (FoundType->WorkerTypeName != NAME_None)
-			{
-				RestrictedWorkerTypes.Add(FoundType->WorkerTypeName);
-			}
-		}
-	}
-
-	// If this is inside FActorGroupInfo::ExcludedWorkers, we should exclude the OwningWorkerType too.
-	if (UStructProperty* StructProp = Cast<UStructProperty>(WorkerTypeNameHandle->GetParentHandle()->GetParentHandle()->GetParentHandle()->GetProperty()))
-	{
-		TSharedPtr<IPropertyHandle> OwningWorkerTypeNameHandle = WorkerTypeNameHandle->GetParentHandle()->GetParentHandle()->GetParentHandle()->GetChildHandle("OwningWorkerType")->GetChildHandle("WorkerTypeName");
-		if (OwningWorkerTypeNameHandle->IsValidHandle())
-		{
-			FName OwningWorkerTypeName;
-			OwningWorkerTypeNameHandle->GetValue(OwningWorkerTypeName);
-			if (OwningWorkerTypeName != NAME_None)
-			{
-				RestrictedWorkerTypes.Add(OwningWorkerTypeName);
-			}
-		}
-	}
-
 	if (const USpatialGDKSettings* Settings = GetDefault<USpatialGDKSettings>())
 	{
 		for (const FName& WorkerType : Settings->ServerWorkerTypes)
 		{
 			OutComboBoxStrings.Add(MakeShared<FString>(WorkerType.ToString()));
 			OutToolTips.Add(SNew(SToolTip).Text(FText::FromName(WorkerType)));
-			OutRestrictedItems.Add(RestrictedWorkerTypes.Contains(WorkerType));
+			OutRestrictedItems.Add(false);
 		}
 	}
 }
@@ -117,14 +74,7 @@ void FWorkerTypeCustomization::OnValueSelected(const FString& SelectedValue, TSh
 {
 	if (WorkerTypeNameHandle->IsValidHandle())
 	{
-		FName CurrentValue;
-		WorkerTypeNameHandle->GetValue(CurrentValue);
-		FName NewValue = FName(*SelectedValue);
-
-		if (CurrentValue == NewValue) {		
-			return;
-		}
-		
+		const FName NewValue = FName(*SelectedValue);
 		WorkerTypeNameHandle->SetValue(NewValue);
 	}
 }

@@ -23,17 +23,7 @@ struct FWorkerType
 	FWorkerType(FName InWorkerTypeName) : WorkerTypeName(InWorkerTypeName)
 	{
 	}
-
-	bool operator==(const FWorkerType &Other) const
-	{
-		return WorkerTypeName == Other.WorkerTypeName;
-	}
 };
-
-FORCEINLINE uint32 GetTypeHash(const FWorkerType& WorkerType)
-{
-	return GetTypeHash(WorkerType.WorkerTypeName);
-}
 
 USTRUCT()
 struct FActorGroupInfo
@@ -47,20 +37,12 @@ struct FActorGroupInfo
 	UPROPERTY(EditAnywhere, Category = "SpatialGDK")
 	FWorkerType OwningWorkerType;
 
-	/** The server workers defined here will have no interest in the classes in this actor group. */
-	UPROPERTY(EditAnywhere, Category = "SpatialGDK", meta = (TitleProperty = "WorkerTypeName"))
-	TSet<FWorkerType> ExcludedWorkerTypes;
-
-	/** Only servers can have interest in the classes in this actor group. */
-	UPROPERTY(EditAnywhere, Category = "SpatialGDK")
-	bool bServerOnly;
-
 	// Using TSoftClassPtr here to prevent eagerly loading all classes.
 	/** The Actor classes contained within this group. Children of these classes will also be included. */	
 	UPROPERTY(EditAnywhere, Category = "SpatialGDK")
 	TSet<TSoftClassPtr<AActor>> ActorClasses;
 	
-	FActorGroupInfo() : Name(NAME_None), OwningWorkerType(), bServerOnly(false)
+	FActorGroupInfo() : Name(NAME_None), OwningWorkerType()
 	{
 	}
 };
@@ -92,6 +74,4 @@ public:
 	// Returns true if ActorA and ActorB are contained in ActorGroups that are
 	// on the same Server worker type.
 	bool IsSameWorkerType(const AActor* ActorA, const AActor* ActorB);
-
-	bool IsExcludedWorkerTypeForActor(const AActor* Actor, const FName& WorkerType);
 };
