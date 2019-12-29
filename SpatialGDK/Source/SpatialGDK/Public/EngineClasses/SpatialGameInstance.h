@@ -47,8 +47,8 @@ public:
 	FORCEINLINE UGlobalStateManager* GetGlobalStateManager() { return GlobalStateManager; };
 	FORCEINLINE USpatialStaticComponentView* GetStaticComponentView() { return StaticComponentView; };
 
-	void HandleOnConnected();
-	void HandleOnConnectionFailed(const FString& Reason);
+	virtual void HandleOnConnected();
+	virtual void HandleOnConnectionFailed(const FString& Reason);
 
 	// Invoked when this worker has successfully connected to SpatialOS
 	FOnConnectedEvent OnConnected;
